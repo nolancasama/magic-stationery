@@ -16,6 +16,7 @@ import { buildBook, buildCrayon, buildEraser, buildNotebook, buildPencil, buildR
 import { SURPRISES, type PlayContext } from "./surprises.ts";
 import { buildChair, buildDesk } from "./furniture.ts";
 import { buildBamboo, buildBanana, buildElephant, buildMonkey, buildPanda, buildPenguin } from "./zoo.ts";
+import { buildApple, buildCarrot, buildEgg, buildMilk, buildOrange, buildTomato } from "./market.ts";
 
 export interface IntroContext {
   effects: Effects;
@@ -210,8 +211,42 @@ export const WORD_KINDS: Record<WordId, WordKind> = {
       audio.bounce(1.2);
       await squash(m, 0.08);
     }
+  },
+  // Level 4, the Supermarket.
+  apple: { build: (tint, seed) => buildApple(tint, seed), tintable: true, intro: (m) => rollIn(m) },
+  orange: { build: (tint) => buildOrange(tint), tintable: false, intro: (m) => rollIn(m) },
+  tomato: { build: (tint) => buildTomato(tint), tintable: false, intro: (m) => rollIn(m) },
+  carrot: { build: (tint) => buildCarrot(tint), tintable: false, intro: (m) => dropIn(m, 0.35, 0.55, Math.PI) },
+  egg: {
+    build: (tint) => buildEgg(tint),
+    tintable: false,
+    async intro(m) {
+      // Lands softly and wobbles.
+      await dropIn(m, 0.25, 0.5);
+      await animate(0.6, (k) => (m.inner.rotation.z = Math.sin(k * Math.PI * 4) * 0.18 * (1 - k)));
+      audio.pop(1.8);
+    }
+  },
+  milk: {
+    build: (tint) => buildMilk(tint),
+    tintable: true,
+    async intro(m) {
+      await dropIn(m, 0.4, 0.55);
+      audio.sparkle(3, 1318);
+      await squash(m, 0.06);
+    }
   }
 };
+
+/** Round food rolls in from the side and settles. */
+async function rollIn(m: Made) {
+  await animate(0.55, (k) => {
+    m.inner.position.x = -0.35 * (1 - ease.out(k));
+    m.inner.rotation.z = (1 - ease.out(k)) * Math.PI * 2;
+  });
+  audio.bounce(1.5);
+  await squash(m, 0.1);
+}
 
 export interface SurpriseThing {
   made: Made;

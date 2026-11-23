@@ -293,3 +293,39 @@ user's "Claude directly" work).
 - **E2E lesson:** Chromium 153+ has a native unprefixed `SpeechRecognition`, which the game prefers, so a
   test's fake recogniser must replace both names. The earlier "hang" was the real recogniser hearing
   silence in a headless browser; the game itself answered "I didn't hear you" correctly.
+
+## 2026-11-24 — Level 4, the Supermarket (built directly by Claude; the user: "no tests for this session just make levels")
+
+- **What:** Mr. Green's supermarket (SPEC §8): a checkout, a dairy fridge, a bread shelf, fruit and vegetable
+  stands. Customers (Ken, Yui, Taro, Ms. Penny) come in with baskets; the child asks **"What do you want?"**,
+  draws the food if its crate is empty, asks **"How many?"**, clicks the crate once per item (each hops into
+  the basket, counted aloud) and says **"Here you are."** Last, the child shops: "I want ___, please." /
+  "___, please." … "Thank you."
+- **Why:** *Let's Try! 2* Unit 7 (What do you want?) with numbers and colours. The child says both sides: the
+  questions as the shop helper, the answers as a customer. Counting into a basket is the level's new mechanic
+  (placement and quantities were kept for the Supermarket since Level 1).
+- **"Here you are." is the done signal:** the prompt stays open while the child clicks the display
+  (`Game.pickSlot`: waits for display clicks without walking or moving the camera; `cancelPick` when they
+  speak). Too few → the customer repeats the number; one too many hops straight back; after three short
+  tries the magic counts out the rest (every child can finish). The customer's "Three, please." is shown in
+  the prompt as well as spoken (grade-4 listeners).
+- **Orange or tomato is the crayon's call:** neither is a Quick, Draw! category. Any round drawing counts
+  (shape rule `round`, aspect up to ~1.5, plus round-ish labels); the dominant crayon decides. Red and round
+  when an orange was asked → "that's a tomato!"; the wanted crayon gets a ★, then is preselected, then the
+  magic recolours the drawing (the rule of Yui's crayon task). Egg: `oval` rule (aspect ~1.1-2.0) or a circle.
+  Milk: a gable-top carton reads as a house to the model (the hint scores 92% house): aliases house, cup,
+  mug, square; its hint shows from the start.
+- **Answers are judged by the item or number word alone** ("Apples, please." and "Three, please." are
+  correct answers); the questions need both key words (what + want, how + many). Number variants include
+  recogniser homophones (to/too, for, tree/free).
+- **Hint drawings are hand-made** (the dataset files are no longer on this PC), checked with the game's own
+  model: apple 99%, carrot 100%, milk → house 92%; orange, tomato and egg pass their shape rules.
+- **People carry baskets:** `Character.carry()` hangs an object from the left hand, kept upright whatever
+  the arm does (an exact counter-rotation, Euler order ZYX), the same size for children and adults.
+- **Places are lists, not names:** `ROOM_PLACES`, `unitsOf` and `lockedWhy` replace store/school/zoo
+  branches in the town labels, colour levels and locked messages.
+- **Rejected:** a red "orange" restoring the tomato crate instead (fun, but steps would complete out of
+  order); hiding the number (too hard by ear alone at grade 4); a Done button for the basket (speech is the
+  done signal); ceiling lamps over the stands (they hung between the camera and the crates).
+- **Not run yet (the user's instruction, this session):** no test or playthrough has executed this level;
+  only the room was judged from screenshots (erased, restored, the stands, the fridge, the checkout).

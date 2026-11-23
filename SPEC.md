@@ -147,8 +147,9 @@ src/ui/           hud, dialogue, ask prompt, draw panel, settings (teacher), sty
   animals with species behaviours (monkeys climb and eat the bananas you draw, elephants
   trumpet and spray, giraffes browse, penguins slide and dive, fish swim, ducks paddle, pandas sit and
   eat bamboo — bamboo by stencil/rule). "Do you like elephants?", "What animal do you like?".
-- **Supermarket:** quantities ("three apples"), placement into baskets, colour disambiguation for
-  orange/tomato, egg by shape rule, milk by stencil; customers shop and check out.
+- **Supermarket — BUILT (2026-11-24), see §8.** Original design: quantities ("three apples"), placement
+  into baskets, colour disambiguation for orange/tomato, egg by shape rule, milk by stencil; customers shop
+  and check out.
 - **Gym:** physics objects (balls bounce, roll, are kicked), rackets used by NPCs; hoop and net by
   guided construction; the sports festival starts.
 
@@ -188,3 +189,38 @@ classroom is finished.
 5. **Penguins** waddle and dive into the pool. Ken: **"Do you like penguins?"**
 6. The player asks Mr. Oka **"What animal do you like?"** ("I like pandas!"). Taro asks the player, who
    answers **"I like ___."** from elephants / monkeys / pandas / penguins. Album of the child's animals.
+
+## 8. Level 4 — Supermarket (built)
+
+Mr. Green's supermarket, erased: empty fruit and vegetable crates and an empty dairy fridge with faint
+outlines of the missing food. Opens once the zoo is finished. *Let's Try! 2* Unit 7 — **"What do you
+want?" "I want ___, please." "How many?" "___, please." "Here you are." "Thank you."** — with numbers
+one to five and colours.
+
+**New mechanic: counting into a basket.** A customer comes in with a basket. The child asks what they
+want (and draws it if the crate is empty), asks how many, clicks the display once per item — each one
+hops into the basket and is counted aloud ("One! Two! Three!") — then says "Here you are." The customer's
+"Three, please." is spoken and shown with the prompt; too few → "That's two. **Three**, please!"; one too
+many hops back → "Oops! **Three**, please."; after three short tries the magic counts out the rest. The
+shelves never run out (the magic restocks them).
+
+1. **Hello.** "Hello! Welcome to my supermarket!" → **"Hello!"** The food is erased; customers are coming.
+2. **Ken: apples.** **"What do you want?"** → "I want apples, please." Draw an **apple** (Quick, Draw!).
+   **"How many?"** → "Three, please." Count three. **"Here you are."** → "Thank you!" Ken pays (the
+   register beeps once per item) and browses.
+3. **Yui: oranges.** Draw an **orange**: any round drawing, and the crayon decides. A red one is a tomato
+   ("Red and round… that's a tomato! Oranges are **orange**."); another colour → "Oranges are orange!"
+   After one wrong colour the orange crayon gets a ★, after two it is preselected, after three the magic
+   recolours the drawing (Yui's crayon task, Level 1). "Two, please."
+4. **Vegetables, Taro: tomatoes.** Draw a **tomato** (round + red; an orange one is "an orange!") and a
+   **carrot** (Quick, Draw!). Taro: "I want tomatoes, please." … "Four, please."
+5. **The fridge, Ms. Penny: eggs.** Draw **milk** (a carton; not a dataset category: house, cup, mug and
+   square shapes count; the hint is shown from the start and traced after two misses) and an **egg** (oval
+   shape rule, or a circle). Ms. Penny comes from her shop: "I want eggs, please." … "Five, please."
+6. **Your shopping.** Mr. Green asks the player **"What do you want?"** → **"I want ___, please."**
+   (apples / oranges / tomatoes / carrots / eggs) → **"How many?"** → **"___, please."** (one to five; the
+   child's choice) → he counts them into the player's basket → "Here you are." → **"Thank you."** The
+   supermarket is back; album of the child's food.
+
+Speech: the child's answers are judged by the item or number word ("Apples, please." is a correct answer
+too); the questions need both key words (what + want, how + many).

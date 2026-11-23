@@ -57,9 +57,9 @@ async function boot() {
 
   if (E2E) exposeHooks(game);
 
-  // Debug views for screenshot passes: ?scene=store|school[&fill=1][&view=counter]
+  // Debug views for screenshot passes: ?scene=store|school|zoo|market[&fill=1][&view=counter]
   const scene = params.get("scene");
-  if (scene === "store" || scene === "school" || scene === "zoo") {
+  if (scene === "store" || scene === "school" || scene === "zoo" || scene === "market") {
     await modelReady;
     game.enterRoom(scene);
     game.hud.setVisible(true);
@@ -93,9 +93,9 @@ async function boot() {
   let leaving: (() => void) | null = null;
   const announced = new Set<string>();
   game.hud.townBtn.addEventListener("click", () => {
-    if (game.area !== "store" && game.area !== "school" && game.area !== "zoo") return;
+    if (game.area !== "store" && game.area !== "school" && game.area !== "zoo" && game.area !== "market") return;
     if (game.scripting) {
-      const who: Record<string, [string, string]> = { store: ["Ms. Penny", "ペニーさん"], school: ["Ms. Mori", "もり先生"], zoo: ["Mr. Oka", "おかさん"] };
+      const who: Record<string, [string, string]> = { store: ["Ms. Penny", "ペニーさん"], school: ["Ms. Mori", "もり先生"], zoo: ["Mr. Oka", "おかさん"], market: ["Mr. Green", "グリーンさん"] };
       const [en, ja] = who[game.area];
       game.hud.say(`Let's help ${en} first!`, `まず ${ja}を たすけよう！`);
       return;
@@ -108,7 +108,7 @@ async function boot() {
     if (next) game.objective(next.en, next.ja, game.town.places[next.place].label.clone().setY(5.4));
     else game.objective(null);
     const picked = await game.waitPlace();
-    if (picked !== "store" && picked !== "school" && picked !== "zoo") continue;
+    if (picked !== "store" && picked !== "school" && picked !== "zoo" && picked !== "market") continue;
     game.setMarker(null);
     const door = game.town.places[picked].door;
     await game.player.go(door.x, door.z);
@@ -127,9 +127,12 @@ async function boot() {
       } else if (picked === "school") {
         await game.say("narrator", "Look! The **School** is back in colour!", "みて！ がっこうに いろが もどった！");
         await game.say("narrator", "Next: the **Zoo**! Let's go!", "つぎは どうぶつえん！ いってみよう！");
-      } else {
+      } else if (picked === "zoo") {
         await game.say("narrator", "Look! The **Zoo** is back in colour!", "みて！ どうぶつえんに いろが もどった！");
-        await game.say("narrator", "Next: the **Supermarket**. Coming soon!", "つぎは スーパー。もうすぐ あそべるよ！");
+        await game.say("narrator", "Next: the **Supermarket**! Let's go!", "つぎは スーパー！ いってみよう！");
+      } else {
+        await game.say("narrator", "Look! The **Supermarket** is back in colour!", "みて！ スーパーに いろが もどった！");
+        await game.say("narrator", "Next: the **Gym**. Coming soon!", "つぎは たいいくかん。もうすぐ あそべるよ！");
       }
       game.dialogue.hide();
       game.engine.setLensShift(0);

@@ -24,7 +24,13 @@ export type WordId =
   | "panda"
   | "penguin"
   | "banana"
-  | "bamboo";
+  | "bamboo"
+  | "apple"
+  | "orange"
+  | "tomato"
+  | "carrot"
+  | "egg"
+  | "milk";
 
 export interface Word {
   id: WordId;
@@ -36,8 +42,11 @@ export interface Word {
   /** Model label -> weight towards this word. */
   accepts: Record<string, number>;
   /** A geometric rule that also recognises the word (for words the dataset lacks). */
-  rule?: "longThin";
+  rule?: ShapeRule;
 }
+
+/** longThin: ruler, bamboo. round: an orange or a tomato (the crayon tells them apart). oval: an egg. */
+export type ShapeRule = "longThin" | "round" | "oval";
 
 export const WORDS: Record<WordId, Word> = {
   pen: { id: "pen", en: "pen", plural: "pens", article: "a", ja: "ペン", accepts: { marker: 1, pencil: 0.9, crayon: 0.7, paintbrush: 0.6 } },
@@ -59,7 +68,16 @@ export const WORDS: Record<WordId, Word> = {
   penguin: { id: "penguin", en: "penguin", plural: "penguins", article: "a", ja: "ペンギン", accepts: { penguin: 1, bird: 0.35, duck: 0.35, owl: 0.3 } },
   banana: { id: "banana", en: "banana", plural: "bananas", article: "a", ja: "バナナ", accepts: { banana: 1, moon: 0.4, carrot: 0.2 } },
   // Not a Quick, Draw! category: a long thin shape (like the ruler) or what children draw instead.
-  bamboo: { id: "bamboo", en: "bamboo", plural: "bamboo", article: "a", ja: "たけ", accepts: { line: 0.8, "palm tree": 0.4, tree: 0.3, pencil: 0.3, grass: 0.3 }, rule: "longThin" }
+  bamboo: { id: "bamboo", en: "bamboo", plural: "bamboo", article: "a", ja: "たけ", accepts: { line: 0.8, "palm tree": 0.4, tree: 0.3, pencil: 0.3, grass: 0.3 }, rule: "longThin" },
+  // Level 4, the Supermarket. Apples and carrots are Quick, Draw! categories.
+  apple: { id: "apple", en: "apple", plural: "apples", article: "an", ja: "りんご", accepts: { apple: 1, pear: 0.6, circle: 0.35, onion: 0.3, blueberry: 0.3, strawberry: 0.2 } },
+  carrot: { id: "carrot", en: "carrot", plural: "carrots", article: "a", ja: "にんじん", accepts: { carrot: 1, pencil: 0.35, crayon: 0.3, triangle: 0.3, banana: 0.2, line: 0.2 } },
+  // Not categories: any round drawing (the crayon decides orange or tomato, in the level script).
+  orange: { id: "orange", en: "orange", plural: "oranges", article: "an", ja: "オレンジ", accepts: { circle: 0.7, apple: 0.6, blueberry: 0.5, onion: 0.4, sun: 0.4, cookie: 0.3, basketball: 0.3 }, rule: "round" },
+  tomato: { id: "tomato", en: "tomato", plural: "tomatoes", article: "a", ja: "トマト", accepts: { circle: 0.7, apple: 0.6, blueberry: 0.5, onion: 0.4, strawberry: 0.3, cookie: 0.3 }, rule: "round" },
+  egg: { id: "egg", en: "egg", plural: "eggs", article: "an", ja: "たまご", accepts: { circle: 0.7, potato: 0.5, pear: 0.3, cookie: 0.3, onion: 0.25 }, rule: "oval" },
+  // A gable-top carton reads as a house; a glass or a bottle as a cup or a mug.
+  milk: { id: "milk", en: "milk", plural: "milk", article: "a", ja: "ぎゅうにゅう", accepts: { house: 0.6, cup: 0.6, mug: 0.5, square: 0.5, calendar: 0.3, book: 0.3, "cell phone": 0.3 } }
 };
 
 /** Model labels that mean "not a real thing yet": plain shapes and scribbles. */
@@ -100,5 +118,5 @@ export function withArticle(label: string): string {
 
 export function wordWithArticle(id: WordId): string {
   const w = WORDS[id];
-  return id === "scissors" || id === "bamboo" ? w.en : `${w.article} ${w.en}`;
+  return id === "scissors" || id === "bamboo" || id === "milk" ? w.en : `${w.article} ${w.en}`;
 }

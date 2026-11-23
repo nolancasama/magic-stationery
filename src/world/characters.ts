@@ -581,6 +581,33 @@ export class Character {
     this.body.scale.y = 1 + breathe;
     this.hop = damp(this.hop, lift);
     this.model.position.y = bodyY + this.hop;
+    // A carried basket hangs upright from the hand whatever the arm does (exact inverse of the arm's XYZ turn).
+    if (this.carrier) this.carrier.rotation.set(-this.armL.rotation.x, -this.armL.rotation.y, -this.armL.rotation.z, "ZYX");
+  }
+
+  private carrier: THREE.Group | null = null;
+
+  /**
+   * Carry something in the left hand by its handle (a shopping basket, origin at its bottom,
+   * `handle` metres above it). Same size in the world whatever the person's scale; null drops it.
+   */
+  carry(obj: THREE.Object3D | null, handle = 0.33) {
+    this.carrier?.removeFromParent();
+    this.carrier = null;
+    if (!obj) return;
+    const s = this.look.scale ?? 1;
+    const holder = new THREE.Group();
+    holder.position.copy(this.hand.position);
+    obj.scale.setScalar(1 / s);
+    obj.position.set(0, -handle / s, 0.02 / s);
+    holder.add(obj);
+    this.armL.add(holder);
+    this.carrier = holder;
+  }
+
+  /** What the left hand carries, if anything. */
+  get carried(): THREE.Object3D | null {
+    return this.carrier?.children[0] ?? null;
   }
 }
 

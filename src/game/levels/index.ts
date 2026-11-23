@@ -5,7 +5,8 @@
  */
 import type { PlaceId } from "../../world/areas/town.ts";
 import type { Game } from "../game.ts";
-import { schoolProgress, storeProgress, type SaveData } from "../save.ts";
+import { placeProgress, schoolProgress, storeProgress, type SaveData } from "../save.ts";
+import { runMarket } from "./market.ts";
 import { runSchool } from "./school.ts";
 import { runZoo } from "./zoo.ts";
 import { runStore } from "./store.ts";
@@ -33,7 +34,12 @@ export const LEVELS: Record<PlaceId, LevelDef> = {
     run: runZoo,
     open: (s) => schoolProgress(s) >= 1
   },
-  market: { place: "market", focus: "What do you want? Fruit and vegetables, quantities." },
+  market: {
+    place: "market",
+    focus: "What do you want? I want ___, please. How many? ___, please. Here you are. Fruit, vegetables, numbers, colours.",
+    run: runMarket,
+    open: (s) => placeProgress(s, "zoo") >= 1
+  },
   gym: { place: "gym", focus: "What sport do you like? Sports equipment, physics." }
 };
 

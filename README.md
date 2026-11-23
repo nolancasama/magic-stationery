@@ -14,13 +14,15 @@ Ms. Penny lends you a magic pen: draw the missing things, and they come to life.
   the classroom clock and the alphabet strip.
 - **Speak** to the people: "Do you have a pen?", "Yes, I do." / "No, I don't." (the true answer depends
   on what you have restored), "What time is it?" — "It's eight thirty.", "Do you like elephants?",
-  "What animal do you like?" — "I like pandas." Speaking comes first; tap choices appear after a few
+  "What animal do you like?" — "I like pandas.", "What do you want?" — "I want apples, please.",
+  "How many?" — "Three, please.", "Here you are." Speaking comes first; tap choices appear after a few
   tries, when the microphone is blocked, or when a teacher turns the microphone off.
+- **Count** at the supermarket: put the right number of apples, oranges or eggs into a customer's basket.
 - **Restore** the place: everything you bring back spreads colour into the place, adds a layer to the
   music and brings people back.
 
-Built: the town (five places), Level 1 Penny's Stationery, Level 2 Ms. Mori's Classroom and Level 3
-Mr. Oka's Zoo. The Supermarket and the Gym are designed (`SPEC.md`) and shown as "Coming soon".
+Built: the town (five places), Level 1 Penny's Stationery, Level 2 Ms. Mori's Classroom, Level 3
+Mr. Oka's Zoo and Level 4 Green's Supermarket. The Gym is designed (`SPEC.md`) and shown as "Coming soon".
 
 ## Run
 
@@ -37,7 +39,7 @@ Walk by clicking the floor, or with WASD / the arrow keys.
 Teacher settings (⚙️): microphone on/off, drawing help (Extra = trace stencil from the start), touchpad
 pen (click to put the pen down / lift it), Japanese help, voice speed, music, sound effects, reset.
 
-Debug views: `?e2e=1&scene=store` (or `school`, `zoo`) shows a place erased; add `&fill=1` for it fully
+Debug views: `?e2e=1&scene=store` (or `school`, `zoo`, `market`) shows a place erased; add `&fill=1` for it fully
 restored. `?models=1` shows premade 3D models instead of the child's drawings.
 
 ## How it is made

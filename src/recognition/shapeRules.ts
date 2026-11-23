@@ -64,3 +64,13 @@ function smoothstep(e0: number, e1: number, x: number): number {
 export function longThinScore(f: ShapeFeatures): number {
   return smoothstep(2.2, 3.6, f.aspect);
 }
+
+/** 0..1: a round thing (an orange, a tomato): about as wide as it is tall. */
+export function roundScore(f: ShapeFeatures): number {
+  return 1 - smoothstep(1.35, 1.7, f.aspect);
+}
+
+/** 0..1: an egg: a little longer than it is wide, but not long and thin. */
+export function ovalScore(f: ShapeFeatures): number {
+  return smoothstep(1.08, 1.2, f.aspect) * (1 - smoothstep(1.85, 2.3, f.aspect));
+}

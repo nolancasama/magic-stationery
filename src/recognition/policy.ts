@@ -8,7 +8,7 @@
  *   child can always finish.
  */
 import type { Recognition } from "./recognizer.ts";
-import { longThinScore } from "./shapeRules.ts";
+import { longThinScore, ovalScore, roundScore } from "./shapeRules.ts";
 import { SHAPE_LABELS, WORDS, type WordId } from "./vocab.ts";
 
 export type Verdict =
@@ -51,7 +51,11 @@ export function targetScore(rec: Recognition, target: WordId): number {
 }
 
 export function ruleScore(rec: Recognition, target: WordId): number {
-  return WORDS[target].rule === "longThin" ? longThinScore(rec.features) : 0;
+  const rule = WORDS[target].rule;
+  if (rule === "longThin") return longThinScore(rec.features);
+  if (rule === "round") return roundScore(rec.features);
+  if (rule === "oval") return ovalScore(rec.features);
+  return 0;
 }
 
 export function judge(rec: Recognition, target: WordId, opts: JudgeOptions): Verdict {

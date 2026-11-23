@@ -43,7 +43,20 @@ export type PhraseId =
   | "iLikeElephants"
   | "iLikeMonkeys"
   | "iLikePandas"
-  | "iLikePenguins";
+  | "iLikePenguins"
+  | "whatDoYouWant"
+  | "howMany"
+  | "hereYouAre"
+  | "wantApples"
+  | "wantOranges"
+  | "wantTomatoes"
+  | "wantCarrots"
+  | "wantEggs"
+  | "onePlease"
+  | "twoPlease"
+  | "threePlease"
+  | "fourPlease"
+  | "fivePlease";
 
 const HAVE = ["have", "has", "had", "half", "haf", "hab", "habu", "hav", "haven", "halve", "heave", "hove", "happen", "happened", "having", "havea", "of", "ever"];
 const PEN = ["pen", "pens", "pen's", "penn", "pin", "pins", "pan", "pans", "ben", "pain", "pent", "penny", "happen", "happened", "apen", "upen", "pem", "pend", "pain", "spen"];
@@ -63,6 +76,23 @@ const MONKEY = ["monkey", "monkeys", "monkee", "mankey", "manky", "funky", "monk
 const PANDA = ["panda", "pandas", "banda", "fonda", "honda", "pander"];
 const PENGUIN = ["penguin", "penguins", "pinguin", "pengwin", "penguine", "pen win", "pingu"];
 const YOU = ["you", "u", "yu", "your", "you're", "youre", "ya", "yo", "yoo", "ewe", "yew", "foryou", "4you", "ewe", "hue", "q"];
+// The Supermarket (Level 4). Answers are judged by the item or number word alone:
+// "Apples, please." and "Three, please." are correct answers too.
+const WHAT = ["what", "what's", "whats", "wat", "wot", "whatcha", "watch", "what'd", "but"];
+const WANT = ["want", "wants", "wanna", "won't", "wont", "wan", "went", "wand", "wanted", "one", "won"];
+const HOW = ["how", "hau", "hao", "who", "hows", "how's", "wow"];
+const MANY = ["many", "money", "mini", "menu", "meny", "mani", "manny", "mommy", "mainly", "men", "manyu"];
+const HERE = ["here", "hear", "hair", "hare", "heer", "here's", "heres", "hiya", "ear", "year", "hero", "near"];
+const APPLE = ["apple", "apples", "appel", "aple", "apo", "happle", "abble", "app", "apps", "apples'"];
+const ORANGE = ["orange", "oranges", "orenji", "orange's", "orangey", "arranged", "arrange", "range", "oran"];
+const TOMATO = ["tomato", "tomatoes", "tomatos", "tomate", "tomahto", "tamato", "tomeito", "potato", "tomatoe"];
+const CARROT = ["carrot", "carrots", "carat", "karat", "parrot", "carrot's", "kerrot", "karrot", "carry"];
+const EGG = ["egg", "eggs", "ag", "aggs", "ex", "eck", "ek", "edge", "hegg", "egs", "eg"];
+const ONE = ["one", "1", "won", "wan", "juan", "wun", "own"];
+const TWO = ["two", "2", "to", "too", "tu", "toe", "tow", "tooth"];
+const THREE = ["three", "3", "tree", "free", "sree", "trees", "thee", "sri", "threw", "through"];
+const FOUR = ["four", "4", "for", "fore", "foe", "fo", "pour", "far", "floor"];
+const FIVE = ["five", "5", "fife", "fight", "fine", "hive", "vibe", "fives", "faiv"];
 
 export const PHRASES: Record<PhraseId, Phrase> = {
   doYouHavePen: {
@@ -98,5 +128,19 @@ export const PHRASES: Record<PhraseId, Phrase> = {
   iLikeElephants: { id: "iLikeElephants", en: "I like elephants.", ja: "ぞうが すきです。", keys: [LIKE, ELEPHANT] },
   iLikeMonkeys: { id: "iLikeMonkeys", en: "I like monkeys.", ja: "さるが すきです。", keys: [LIKE, MONKEY] },
   iLikePandas: { id: "iLikePandas", en: "I like pandas.", ja: "パンダが すきです。", keys: [LIKE, PANDA] },
-  iLikePenguins: { id: "iLikePenguins", en: "I like penguins.", ja: "ペンギンが すきです。", keys: [LIKE, PENGUIN] }
+  iLikePenguins: { id: "iLikePenguins", en: "I like penguins.", ja: "ペンギンが すきです。", keys: [LIKE, PENGUIN] },
+  // The Supermarket: the child serves customers, then shops.
+  whatDoYouWant: { id: "whatDoYouWant", en: "What do you want?", ja: "なにが ほしいですか？", keys: [WHAT, WANT], distractors: ["howMany", "whatAnimal"] },
+  howMany: { id: "howMany", en: "How many?", ja: "いくつ？", keys: [HOW, MANY], distractors: ["whatDoYouWant", "hereYouAre"] },
+  hereYouAre: { id: "hereYouAre", en: "Here you are.", ja: "はい、どうぞ。", keys: [HERE], distractors: ["thankYou", "howMany"] },
+  wantApples: { id: "wantApples", en: "I want apples, please.", ja: "りんごを ください。", keys: [APPLE] },
+  wantOranges: { id: "wantOranges", en: "I want oranges, please.", ja: "オレンジを ください。", keys: [ORANGE] },
+  wantTomatoes: { id: "wantTomatoes", en: "I want tomatoes, please.", ja: "トマトを ください。", keys: [TOMATO] },
+  wantCarrots: { id: "wantCarrots", en: "I want carrots, please.", ja: "にんじんを ください。", keys: [CARROT] },
+  wantEggs: { id: "wantEggs", en: "I want eggs, please.", ja: "たまごを ください。", keys: [EGG] },
+  onePlease: { id: "onePlease", en: "One, please.", ja: "ひとつ ください。", keys: [ONE] },
+  twoPlease: { id: "twoPlease", en: "Two, please.", ja: "ふたつ ください。", keys: [TWO] },
+  threePlease: { id: "threePlease", en: "Three, please.", ja: "みっつ ください。", keys: [THREE] },
+  fourPlease: { id: "fourPlease", en: "Four, please.", ja: "よっつ ください。", keys: [FOUR] },
+  fivePlease: { id: "fivePlease", en: "Five, please.", ja: "いつつ ください。", keys: [FIVE] }
 };
