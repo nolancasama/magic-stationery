@@ -31,13 +31,19 @@ export function nameOf(who: Speaker): string {
   return CAST[who].name;
 }
 
+/**
+ * `{shown|spoken}` shows one text and speaks another: letter names are shown in
+ * lowercase but spoken as capitals, so TTS says "dee", not "duh".
+ */
+const SHOWN_SPOKEN = /\{([^|}]*)\|([^}]*)\}/g;
+
 /** Wrap **words** in a highlight span (target vocabulary). */
 export function highlight(text: string): string {
-  const esc = text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string);
+  const esc = text.replace(SHOWN_SPOKEN, "$1").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string);
   return esc.replace(/\*\*(.+?)\*\*/g, '<span class="hl">$1</span>');
 }
 
-export const plain = (text: string) => text.replace(/\*\*/g, "");
+export const plain = (text: string) => text.replace(SHOWN_SPOKEN, "$2").replace(/\*\*/g, "");
 
 export class Dialogue {
   readonly el: HTMLDivElement;

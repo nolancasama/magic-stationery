@@ -16,7 +16,9 @@ export type WordId =
   | "book"
   | "crayon"
   | "ruler"
-  | "schoolbag";
+  | "schoolbag"
+  | "desk"
+  | "chair";
 
 export interface Word {
   id: WordId;
@@ -40,7 +42,10 @@ export const WORDS: Record<WordId, Word> = {
   book: { id: "book", en: "book", plural: "books", article: "a", ja: "ほん", accepts: { book: 1, calendar: 0.4, laptop: 0.4, square: 0.4 } },
   crayon: { id: "crayon", en: "crayon", plural: "crayons", article: "a", ja: "クレヨン", accepts: { crayon: 1, pencil: 0.9, marker: 0.9, paintbrush: 0.5 } },
   ruler: { id: "ruler", en: "ruler", plural: "rulers", article: "a", ja: "じょうぎ", accepts: { line: 0.8, pencil: 0.3, marker: 0.3 }, rule: "longThin" },
-  schoolbag: { id: "schoolbag", en: "schoolbag", plural: "schoolbags", article: "a", ja: "ランドセル", accepts: { backpack: 1, basket: 0.3, square: 0.3 } }
+  schoolbag: { id: "schoolbag", en: "schoolbag", plural: "schoolbags", article: "a", ja: "ランドセル", accepts: { backpack: 1, basket: 0.3, square: 0.3 } },
+  // The dataset has no "desk": a table is a desk; a chair drawn from the side often reads as a table too.
+  desk: { id: "desk", en: "desk", plural: "desks", article: "a", ja: "つくえ", accepts: { table: 1, laptop: 0.4, computer: 0.3, square: 0.3, chair: 0.2 } },
+  chair: { id: "chair", en: "chair", plural: "chairs", article: "a", ja: "いす", accepts: { chair: 1, table: 0.35 } }
 };
 
 /** Model labels that mean "not a real thing yet": plain shapes and scribbles. */

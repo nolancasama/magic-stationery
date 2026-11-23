@@ -1,8 +1,8 @@
-/** The people of Level 1 and the player. Voices are browser TTS pitch/rate. */
+/** The people of the levels and the player. Voices are browser TTS pitch/rate. */
 import type { Look } from "../world/characters.ts";
 import type { Voice } from "../speech/tts.ts";
 
-export type CastId = "penny" | "ken" | "yui" | "taro" | "player" | "pen";
+export type CastId = "penny" | "mori" | "ken" | "yui" | "taro" | "player" | "pen";
 
 export interface CastMember {
   id: CastId;
@@ -17,6 +17,12 @@ export const CAST: Record<Exclude<CastId, "pen">, CastMember> = {
     name: "Ms. Penny",
     voice: { pitch: 1.05, rate: 0.88 },
     look: { skin: "#f6d3b8", hair: "#7a4a2e", hairStyle: "bun", shirt: "#7fb3e6", legs: "#5c6bc0", skirt: true, shoes: "#6d4c41", extras: ["apron", "glasses"], extraColor: "#f28fb0", scale: 1.38 }
+  },
+  mori: {
+    id: "mori",
+    name: "Ms. Mori",
+    voice: { pitch: 1.12, rate: 0.86 },
+    look: { skin: "#f3d0b4", hair: "#2a1d17", hairStyle: "bob", shirt: "#f6a5c0", legs: "#455a64", skirt: true, shoes: "#5d4037", extras: ["glasses"], scale: 1.36 }
   },
   ken: {
     id: "ken",

@@ -1,56 +1,57 @@
 # Current State
 
 ## Status
-New project (2026-11-23). Built directly by Claude at the user's request (no router), from the user's plan
-"Magic Stationery — Restore the World". The plan review (accepted / modified / added / deferred) is
-`SPEC.md` §1; decisions with reasons are in `DESIGN_DECISIONS.md`.
+Built directly by Claude at the user's request (no router) — Level 1 from the user's plan "Magic Stationery —
+Restore the World" (2026-11-23), Level 2 on 2026-11-23 ("Claude directly" again, chosen by the user). The plan
+review is `SPEC.md` §1; Level 2 is `SPEC.md` §6; decisions with reasons are in `DESIGN_DECISIONS.md`.
 
-**Built:** Stage 1 (core systems) + Stage 2 (Level 1, the Stationery Store, complete) + the town hub with
-all five places (four "Coming soon"). Public repo nolancasama/magic-stationery with GitHub Pages
-(Actions workflow), published at the user's request on 2026-11-23.
+**Built:** core systems, Level 1 (the Stationery Store), Level 2 (Ms. Mori's Classroom, opens once the shop is
+finished), the town hub (zoo, market, gym "Coming soon"). Public repo nolancasama/magic-stationery with GitHub
+Pages (Actions workflow).
 
-**Sketch model installed** (`public/models/sketch-model.bin`, 414 KB): int8 test top-1 79.9%, top-3 93.2%,
-top-5 96.0% on 138 classes; the TypeScript pipeline gives top-1 79.5% on 11,040 held-out drawings (parity
-with PyTorch) at ~31 ms per drawing on the desktop. First-try acceptance of genuine drawings: pencil 95%,
-eraser 94%, scissors 96%, book/notebook 100%, crayon 90%, schoolbag 95%, ruler 100%; other things wrongly
-accepted ≤ 1% (ruler 9%, any long thin shape, by design). The first training run was lost at export (see
-DESIGN_DECISIONS); the retrain is deterministic and reproduced it exactly.
+**Models:**
+- Sketch model (`public/models/sketch-model.bin`, 414 KB, 138 Quick, Draw! classes): int8 top-1 79.9%,
+  top-3 93.2%; first-try acceptance of genuine drawings 90-100% per Level 1 word.
+- Glyph model (`public/models/glyph-model.bin`, 393 KB, 0-9 / a-z / A-Z / scribble; UJI Pen Characters v2 +
+  EMNIST thinned to strokes): int8 top-1 80.9%, top-3 96.4% on unseen writers. With the policy, real
+  handwriting of the Level 2 characters is accepted first try 93-100%; other characters wrongly accepted
+  0.3-6.3% (mostly intended look-alikes). Training data lives outside the repo (see tools README).
 
 ## What Exists
-- `src/recognition/` — sketch pipeline: `strokes.ts` + `raster.ts` (shared with training), `model.ts`
-  (int8 CNN forward pass in plain TS), `recognizer.ts`, `vocab.ts` (word → model labels with weights),
-  `shapeRules.ts` (ruler = long thin shape), `policy.ts` (accept / surprise / unclear + help ladder),
-  `examples.ts` (+ generated `examples.json`). Model: `public/models/sketch-model.bin`.
-- `tools/sketch-model/` — reproducible training pipeline (see its README).
-- `src/objects/` — Level 1 models (`stationery.ts`), surprise creatures/things with behaviours
-  (`surprises.ts`), the living doodle (`doodle.ts`), per-kind entrances (`registry.ts`), the
-  transformation (`transform.ts`).
-- `src/world/` — engine (adaptive dpr), materials (erased-grey patch + colour wave, magic reveal, ghost),
-  parts (merged primitives), characters (chibi rigs + poses), nav (grid A*), effects (particles),
-  `areas/store.ts`, `areas/town.ts`.
-- `src/game/` — `game.ts` (controller + shared helpers), `levels/store.ts` (Level 1 script),
-  `levels/index.ts` (place → level registry), `save.ts` (`ms.save.v1`), `cast.ts`.
-- `src/speech/` — recognition/TTS wrappers (ported from monster-island), phrases + matcher.
-- `src/ui/` — HUD, dialogue, ask prompt (speech ladder), draw panel, screens (title, teacher settings,
-  completion album).
+- `src/recognition/` — `strokes.ts` + `raster.ts` (shared with training), `model.ts` (int8 CNN in plain TS),
+  `recognizer.ts` (used by both models), `vocab.ts`, `shapeRules.ts`, `policy.ts` (objects), `glyphs.ts`
+  (characters: constrained policy, look-alikes, "12" splitting, hand-made worksheet-style examples),
+  `examples.ts` (+ `examples.json`).
+- `tools/sketch-model/` — reproducible pipelines for both models (`build-dataset.ts`, `build-glyphs.ts`,
+  shared `augment.ts`, `train.py`, `eval-policy.ts`, `eval-glyphs.ts`, `pick-examples.ts`).
+- `src/world/areas/` — `room.ts` (the `RoomArea` interface), `store.ts`, `classroom.ts` (clock face and
+  alphabet strip are single canvas textures with the child's handwriting painted in), `town.ts`.
+- `src/objects/` — Level 1 models, `furniture.ts` (desk, chair), surprises, living drawings, registry.
+- `src/game/` — `game.ts` (one controller for every room: `room`/`place`, drawFor, writeGlyph, restore,
+  saveGlyph, npcEnter…), `levels/store.ts`, `levels/school.ts`, `levels/index.ts` (registry + unlock order),
+  `save.ts` (`ms.save.v1`, now with a `school` section; old saves load unchanged), `cast.ts` (+ Ms. Mori).
+- `src/ui/` — draw panel has a writing mode (worksheet lines, "Write the letter d!"); dialogue supports
+  `{shown|spoken}` so letter names are spoken correctly.
+- Tests: 71 unit tests; e2e `tests/e2e/store.spec.ts` (2) and `school.spec.ts` (full Level 2 with real
+  handwriting, a wrong letter and a wrong time). Screenshot pass: `scripts/school-shots.mjs`.
 
 ## Current Work
-**Committed + live (2026-11-24, `main`):** the child's own drawing is the object in the world
-(`draw/art.ts`, `objects/living.ts`, `game/config.ts`; `?models=1` restores the kept premade models).
-Verified then: tsc, 48 unit tests, both e2e tests, living-shots + full-playthrough screenshots.
+**Level 2 committed + pushed to `main` (2026-11-23, live via GitHub Pages at the user's request).** Verified
+before commit: tsc, 71 unit tests, all 3 e2e tests (Level 2 playthrough, Level 1 regression, mic-off), Claude
+judged the screenshots (erased/restored room, writing panel with stencil, clock with handwriting, arrival,
+album).
 
-**Also committed + live (2026-11-24):** auto-fill of closed areas, the 🎨 Fill tool (colouring in), hinged
-halves so the child's scissors snip and book opens (`draw/fill.ts`, `art.ts` fills, `drawPanel.ts`,
-`living.ts` hinge). Verified: tsc, 54 unit tests, both e2e tests, screenshots judged by Claude
-(`scripts/living-shots.mjs`, `fill-shots.mjs`, `full-shots.mjs`).
+Also fixed by the room refactor: the player character was missing inside the shop (stayed in the town scene).
+Level 1's e2e draw-call limit was raised 130 → 140 for it (+7 calls).
 
 ## Known Issues
-- Drawing mode: 109 draw calls in the fully restored shop (budget ~100). Merge static display items if a Chromebook struggles.
-- Thin lines read small from the overview camera (faithful line weight); untested at real Chromebook DPI.
-- Drawing usability on a real Chromebook touchpad has not been tried (mouse/touch simulation only).
-- Speech recognition only exercised through the test hook, not a real microphone.
-- Inference ~31 ms/drawing on the desktop; untested on a slow Chromebook (live guesses run only in pauses).
+- Draw calls: restored shop ~132 (with the player now visible), restored classroom ~74. Merge static display
+  items if a Chromebook struggles.
+- Students stand at their places at the end of Level 2 (no sitting pose yet).
+- Thin lines read small from the overview camera (faithful line weight) — the drawn desks look spindly.
+- Writing and drawing on a real Chromebook touchpad not tried; speech only via the test hook, not a real mic.
+- Timetable (SPEC §5) deferred.
 
 ## Next Steps
-1. The user plays Level 1 on a Chromebook and reports feel (drawing, speech, pacing).
-2. Level 2 (Classroom): digit/letter recogniser, clock, alphabet strip, desks/chairs (SPEC.md §5).
+1. The user plays Levels 1-2 on a Chromebook and reports feel (writing with a touchpad, speech, pacing).
+2. Level 3 (Zoo, SPEC.md §5): animals with species behaviours, "Do you like …?".

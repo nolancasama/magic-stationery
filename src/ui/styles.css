@@ -159,6 +159,16 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .paper-wrap { position: relative; border-radius: 20px; overflow: hidden; background: #fffdf7; box-shadow: inset 0 0 0 3px #f1e2c4; }
 .paper-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .paper-wrap .paper-lines { position: absolute; inset: 0; background-image: linear-gradient(#f3ead8 1px, transparent 1px); background-size: 100% 36px; opacity: .8; pointer-events: none; }
+/* Writing (Level 2): worksheet lines framing the stencil's box (top, dashed middle, red base). */
+.draw-panel.writing .paper-lines {
+  opacity: 1;
+  background-image:
+    linear-gradient(#9fb6e0, #9fb6e0), repeating-linear-gradient(90deg, #b9c8e8 0 14px, transparent 14px 26px), linear-gradient(#ef9a9a, #ef9a9a);
+  background-size: 100% 2px, 100% 2px, 100% 3px;
+  background-position: 0 14%, 0 50%, 0 86%;
+  background-repeat: no-repeat;
+}
+.draw-panel.writing [data-test="draw-fill"] { visibility: hidden; }
 .paper-wrap.pen-cursor canvas.ink { cursor: crosshair; }
 .paper-wrap.fill-cursor canvas.ink { cursor: cell; }
 .pen-bubble {

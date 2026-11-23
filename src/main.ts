@@ -1,19 +1,20 @@
 /**
  * Magic Stationery: Restore the World — entry point.
- * Title -> town -> the Stationery Store (Level 1) -> town, with saved progress.
+ * Title -> town -> a place (Level 1 the Stationery Store, Level 2 the School) -> town, with saved progress.
  */
 import "./ui/styles.css";
 import { audio } from "./audio/audio.ts";
 import { music } from "./audio/music.ts";
 import { Game } from "./game/game.ts";
 import { LEVELS } from "./game/levels/index.ts";
-import { defaults, storeProgress } from "./game/save.ts";
+import { defaults, placeProgress } from "./game/save.ts";
 import { exampleFor } from "./recognition/examples.ts";
+import { glyphExample } from "./recognition/glyphs.ts";
 import { Recognizer } from "./recognition/recognizer.ts";
 import type { WordId } from "./recognition/vocab.ts";
 import { tts } from "./speech/tts.ts";
 import { titleScreen } from "./ui/screens.ts";
-import { VIEWS, type SlotId } from "./world/areas/store.ts";
+import type { PlaceId } from "./world/areas/town.ts";
 import { setAnimSpeed, wait } from "./world/tween.ts";
 import type { Drawing } from "./draw/drawing.ts";
 
@@ -28,12 +29,12 @@ async function boot() {
     setAnimSpeed(Number(params.get("speed") ?? 3));
   }
   game.engine.start();
-  game.enterTown(false);
+  game.enterTown(null);
   game.hud.setVisible(false);
   game.objective(null);
 
   const modelUrl = `${import.meta.env.BASE_URL}models/sketch-model.bin`;
-  const modelReady = Recognizer.load(modelUrl)
+  const sketchReady = Recognizer.load(modelUrl)
     .then((r) => {
       game.recognizer = r;
       game.log("model:ok");
@@ -43,18 +44,28 @@ async function boot() {
       console.warn("sketch model unavailable", err);
       game.log("model:missing");
     });
+  const glyphReady = Recognizer.load(`${import.meta.env.BASE_URL}models/glyph-model.bin`)
+    .then((r) => {
+      game.glyphs = r;
+      game.log("glyphs:ok");
+    })
+    .catch((err) => {
+      console.warn("glyph model unavailable", err);
+      game.log("glyphs:missing");
+    });
+  const modelReady = Promise.all([sketchReady, glyphReady]);
 
   if (E2E) exposeHooks(game);
 
-  // Debug views for screenshot passes: ?scene=store[&fill=1][&view=counter]
+  // Debug views for screenshot passes: ?scene=store|school[&fill=1][&view=counter]
   const scene = params.get("scene");
-  if (scene === "store") {
+  if (scene === "store" || scene === "school") {
     await modelReady;
-    game.enterStore();
+    game.enterRoom(scene);
     game.hud.setVisible(true);
     if (params.has("fill")) await game.debugFill();
     const view = params.get("view");
-    if (view) game.focus(VIEWS[view] ?? VIEWS.overview, true);
+    if (view) game.focus(game.room.views[view] ?? game.room.views.overview, true);
     return;
   }
 
@@ -80,34 +91,41 @@ async function boot() {
   }
 
   let leaving: (() => void) | null = null;
-  let announced = false;
+  const announced = new Set<string>();
   game.hud.townBtn.addEventListener("click", () => {
-    if (game.area !== "store") return;
+    if (game.area !== "store" && game.area !== "school") return;
     if (game.scripting) {
-      game.hud.say("Let's help Ms. Penny first!", "まず ペニーさんを たすけよう！");
+      game.hud.say(game.area === "store" ? "Let's help Ms. Penny first!" : "Let's help Ms. Mori first!", game.area === "store" ? "まず ペニーさんを たすけよう！" : "まず もり先生を たすけよう！");
       return;
     }
     leaving?.();
   });
 
   for (;;) {
-    if (storeProgress(game.save) < 1) game.objective("Go to the Stationery Store!", "ぶんぼうぐやに いこう！", game.town.places.store.label.clone().setY(5.4));
+    const next = game.nextPlace();
+    if (next) game.objective(next.en, next.ja, game.town.places[next.place].label.clone().setY(5.4));
     else game.objective(null);
-    await game.waitPlace();
+    const picked = await game.waitPlace();
+    if (picked !== "store" && picked !== "school") continue;
     game.setMarker(null);
-    const door = game.town.places.store.door;
+    const door = game.town.places[picked].door;
     await game.player.go(door.x, door.z);
-    await game.fadeTo(() => game.enterStore());
+    await game.fadeTo(() => game.enterRoom(picked));
     game.objective(null);
-    await LEVELS.store.run?.(game);
+    await LEVELS[picked].run?.(game);
     await new Promise<void>((resolve) => (leaving = resolve));
     leaving = null;
-    await game.fadeTo(() => game.enterTown(true));
-    if (storeProgress(game.save) >= 1 && !announced) {
-      announced = true;
+    await game.fadeTo(() => game.enterTown(picked));
+    if (placeProgress(game.save, picked) >= 1 && !announced.has(picked)) {
+      announced.add(picked);
       game.scripting = true;
-      await game.say("narrator", "Look! The **Stationery Store** is back in colour!", "みて！ ぶんぼうぐやに いろが もどった！");
-      await game.say("narrator", "Next: the **Classroom**. Coming soon!", "つぎは きょうしつ。もうすぐ あそべるよ！");
+      if (picked === "store") {
+        await game.say("narrator", "Look! The **Stationery Store** is back in colour!", "みて！ ぶんぼうぐやに いろが もどった！");
+        await game.say("narrator", "Next: the **School**! Let's go!", "つぎは がっこう！ いってみよう！");
+      } else {
+        await game.say("narrator", "Look! The **School** is back in colour!", "みて！ がっこうに いろが もどった！");
+        await game.say("narrator", "Next: the **Zoo**. Coming soon!", "つぎは どうぶつえん。もうすぐ あそべるよ！");
+      }
       game.dialogue.hide();
       game.engine.setLensShift(0);
       game.scripting = false;
@@ -124,15 +142,17 @@ function exposeHooks(game: Game) {
       waiting: game.waitingFor,
       steps: game.save.store.steps.slice(),
       slots: Object.keys(game.save.store.slots),
+      school: { steps: game.save.school.steps.slice(), slots: Object.keys(game.save.school.slots), glyphs: Object.keys(game.save.school.glyphs) },
       model: game.recognizer ? game.recognizer.labels.length : 0,
+      glyphModel: game.glyphs ? game.glyphs.labels.length : 0,
       events: game.events.slice(-30),
       dialogue: !game.dialogue.el.classList.contains("hidden") ? game.dialogue.el.querySelector(".en")?.textContent : null,
       stats: game.stats()
     }),
     /** Feed a transcript to the open speaking prompt. */
     say: (text: string) => game.asker.simulate(text),
-    clickSlot: (id: SlotId) => game.clickSlot(id),
-    clickPlace: () => game.clickPlace("store"),
+    clickSlot: (id: string) => game.clickSlot(id),
+    clickPlace: (id: PlaceId = "store") => game.clickPlace(id),
     /** Put the target's example drawing on the canvas (scaled to it) and press Finish. */
     drawExample: (word: WordId, color?: string) => {
       const ex = exampleFor(word);
@@ -140,11 +160,24 @@ function exposeHooks(game: Game) {
       api.drawStrokes(ex, color);
       return true;
     },
+    /** Write the hand-made example of a character ("d", "12") and press Finish. */
+    writeExample: (target: string) => {
+      const ex = glyphExample(target);
+      if (!ex) return false;
+      api.drawStrokes(ex);
+      return true;
+    },
     drawStrokes: (d: Drawing, color?: string) => {
       const r = game.draw.canvasRect;
-      const scale = (Math.min(r.width, r.height) * 0.7) / 255;
-      const ox = (r.width - 255 * scale) / 2;
-      const oy = (r.height - 255 * scale) / 2;
+      let w = 255;
+      let hgt = 255;
+      for (const s of d.strokes) for (const [x, y] of s.points) {
+        w = Math.max(w, x);
+        hgt = Math.max(hgt, y);
+      }
+      const scale = (Math.min(r.width, r.height) * 0.7) / Math.max(w, hgt);
+      const ox = (r.width - w * scale) / 2;
+      const oy = (r.height - hgt * scale) / 2;
       game.draw.inject({ strokes: d.strokes.map((s) => ({ color: color ?? s.color, points: s.points.map(([x, y]) => [ox + x * scale, oy + y * scale] as [number, number]) })) });
       game.draw.pressFinish();
     },

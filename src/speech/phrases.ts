@@ -27,13 +27,22 @@ export type PhraseId =
   | "whatTimeIsIt"
   | "thankYou"
   | "iLikeRed"
-  | "hello";
+  | "hello"
+  | "goodMorning"
+  | "itsSeven"
+  | "itsEight"
+  | "itsEightThirty";
 
 const HAVE = ["have", "has", "had", "half", "haf", "hab", "habu", "hav", "haven", "halve", "heave", "hove", "happen", "happened", "having", "havea", "of", "ever"];
 const PEN = ["pen", "pens", "pen's", "penn", "pin", "pins", "pan", "pans", "ben", "pain", "pent", "penny", "happen", "happened", "apen", "upen", "pem", "pend", "pain", "spen"];
 const YES = ["yes", "yeah", "yep", "yup", "yea", "yas", "yess", "yesh", "jess", "ies", "guess", "ido", "ya", "yah", "yees", "years", "yet"];
 const NO = ["no", "nope", "nah", "know", "noh", "nou", "nor", "not", "don't", "dont", "idont", "doent", "noi", "now", "nobody", "known"];
 const FOR = ["for", "four", "4", "fo", "foe", "fore", "fur", "far", "pour", "four", "forth", "foryou", "4you", "fall", "foa", "hoe", "ho"];
+// Time answers (Level 2). Recognisers write "8:30" as digits: the colon splits it into "8" "30".
+const SEVEN = ["seven", "7", "heaven", "sevens", "seben", "sven", "kevin"];
+const EIGHT = ["eight", "8", "ate", "eighth", "eit", "eat", "hate", "eighty", "eights"];
+const THIRTY = ["thirty", "30", "dirty", "thirsty", "therty", "thurty", "sirty", "shirty", "sardy", "sati", "turkey"];
+const MORNING = ["morning", "mornin", "moaning", "mooning", "mourning", "morningu", "mooring", "warning", "goodmorning"];
 const YOU = ["you", "u", "yu", "your", "you're", "youre", "ya", "yo", "yoo", "ewe", "yew", "foryou", "4you", "ewe", "hue", "q"];
 
 export const PHRASES: Record<PhraseId, Phrase> = {
@@ -57,5 +66,9 @@ export const PHRASES: Record<PhraseId, Phrase> = {
   whatTimeIsIt: { id: "whatTimeIsIt", en: "What time is it?", keys: [["time", "times"]] },
   thankYou: { id: "thankYou", en: "Thank you.", keys: [["thank", "thanks", "sank", "tank"]] },
   iLikeRed: { id: "iLikeRed", en: "I like red.", keys: [["like"], ["red"]] },
-  hello: { id: "hello", en: "Hello!", keys: [["hello", "hi", "hallo", "hullo"]] }
+  hello: { id: "hello", en: "Hello!", keys: [["hello", "hi", "hallo", "hullo"]] },
+  goodMorning: { id: "goodMorning", en: "Good morning!", ja: "おはようございます！", keys: [MORNING], distractors: ["hello", "thankYou"] },
+  itsSeven: { id: "itsSeven", en: "It's seven o'clock.", ja: "7じです。", keys: [SEVEN], forbid: [...THIRTY, ...EIGHT] },
+  itsEight: { id: "itsEight", en: "It's eight o'clock.", ja: "8じです。", keys: [EIGHT], forbid: [...THIRTY, ...SEVEN] },
+  itsEightThirty: { id: "itsEightThirty", en: "It's eight thirty.", ja: "8じ30ぷんです。", keys: [EIGHT, THIRTY], forbid: SEVEN }
 };

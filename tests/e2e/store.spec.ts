@@ -117,7 +117,9 @@ test("Level 1 can be completed by speaking, with a funny surprise on the way", a
   const s = await state(page);
   expect(s.steps).toEqual(["pen", "pencils", "shelf", "ken", "crayons", "books", "taro"]);
   expect(s.slots.sort()).toEqual(["books", "crayons", "erasers", "notebooks", "pencilCup", "rulers", "schoolbags", "scissors"]);
-  expect(s.stats.calls).toBeLessThan(130);
+  // 2026-11-23: +7 calls since the player character is really in the shop (before the
+  // room refactor it stayed in the town scene and was invisible inside the shop).
+  expect(s.stats.calls).toBeLessThan(140);
   expect(errors).toEqual([]);
   // The rabbit appeared and played, but did not complete the pencil task.
   const events = await page.evaluate(() => (window.__ms as unknown as { game: { events: string[] } }).game.events);

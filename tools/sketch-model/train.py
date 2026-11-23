@@ -248,7 +248,7 @@ header = {
     "trained": time.strftime("%Y-%m-%d"),
     "testTop1": round(q_top1, 4),
     "testTop3": round(q_top3, 4),
-    "source": "Quick, Draw! dataset (Google, CC BY 4.0) - recognised drawings, simplified format",
+    "source": os.environ.get("MS_SOURCE", "Quick, Draw! dataset (Google, CC BY 4.0) - recognised drawings, simplified format"),
 }
 hb = json.dumps(header, separators=(",", ":")).encode("utf8")
 hb += b" " * ((4 - len(hb) % 4) % 4)

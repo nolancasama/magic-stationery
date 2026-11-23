@@ -11,6 +11,21 @@ export const STORE_STEPS: StoreStep[] = ["pen", "pencils", "shelf", "ken", "cray
 export type SlotKey = "pencilCup" | "erasers" | "scissors" | "rulers" | "crayons" | "books" | "notebooks" | "schoolbags";
 export const SLOT_KEYS: SlotKey[] = ["pencilCup", "erasers", "scissors", "rulers", "crayons", "books", "notebooks", "schoolbags"];
 
+/** Level 2, the Classroom (SPEC.md §5). */
+export type SchoolStep = "arrive" | "desks" | "clock" | "time" | "letters" | "bell";
+export const SCHOOL_STEPS: SchoolStep[] = ["arrive", "desks", "clock", "time", "letters", "bell"];
+export type SchoolSlotKey = "desks" | "chairs";
+export const SCHOOL_SLOT_KEYS: SchoolSlotKey[] = ["desks", "chairs"];
+/** Characters the child writes: the clock's numbers and the alphabet strip's missing letters. */
+export type GlyphKey = "n12" | "n3" | "n6" | "n9" | "ld" | "lg" | "lm" | "lt";
+export const CLOCK_KEYS: GlyphKey[] = ["n12", "n3", "n6", "n9"];
+export const LETTER_KEYS: GlyphKey[] = ["ld", "lg", "lm", "lt"];
+export const GLYPH_KEYS: GlyphKey[] = [...CLOCK_KEYS, ...LETTER_KEYS];
+/** What the child writes for each key. */
+export const GLYPH_CHARS: Record<GlyphKey, string> = { n12: "12", n3: "3", n6: "6", n9: "9", ld: "d", lg: "g", lm: "m", lt: "t" };
+
+export type Step = StoreStep | SchoolStep;
+
 export interface SlotSave {
   /** Crayon colour (hex) of each filled anchor; null = natural colours. */
   tints: (string | null)[];
@@ -42,6 +57,12 @@ export interface SaveData {
     steps: StoreStep[];
     slots: Partial<Record<SlotKey, SlotSave>>;
   };
+  school: {
+    steps: SchoolStep[];
+    slots: Partial<Record<SchoolSlotKey, SlotSave>>;
+    /** The child's own handwriting for each written character. */
+    glyphs: Partial<Record<GlyphKey, Art>>;
+  };
   settings: Settings;
 }
 
@@ -52,6 +73,7 @@ export function defaults(): SaveData {
     v: 1,
     started: false,
     store: { steps: [], slots: {} },
+    school: { steps: [], slots: {}, glyphs: {} },
     settings: { mic: true, help: "normal", japanese: true, slowVoice: false, music: true, sfx: true, touchpadPen: false }
   };
 }
@@ -69,33 +91,17 @@ export function sanitize(raw: unknown): SaveData {
   const store = r.store as Record<string, unknown> | undefined;
   if (store && typeof store === "object") {
     if (Array.isArray(store.steps)) out.store.steps = STORE_STEPS.filter((s) => (store.steps as unknown[]).includes(s));
-    const slots = store.slots as Record<string, unknown> | undefined;
-    if (slots && typeof slots === "object") {
-      for (const key of SLOT_KEYS) {
-        const s = slots[key] as Record<string, unknown> | undefined;
-        if (!s || !Array.isArray(s.tints)) continue;
-        const tints = (s.tints as unknown[]).slice(0, 8).map((t) => (isHex(t) ? t : null));
-        if (!tints.length) continue;
-        const entry: SlotSave = { tints };
-        if (Array.isArray(s.drawing)) {
-          const d = (s.drawing as unknown[])
-            .slice(0, 60)
-            .filter(Array.isArray)
-            .map((st) => (st as unknown[]).slice(0, 400).filter((pt): pt is number[] => Array.isArray(pt) && pt.length === 2 && pt.every((n) => Number.isFinite(n))));
-          if (d.length) entry.drawing = d;
-        }
-        if (Array.isArray(s.arts)) {
-          const arts = (s.arts as unknown[]).slice(0, 8).map(sanitizeArt).filter((a): a is Art => a !== null);
-          if (arts.length) {
-            entry.arts = arts;
-            const src = Array.isArray(s.src) ? (s.src as unknown[]) : [];
-            entry.src = tints.map((_, i) => {
-              const v = src[i];
-              return typeof v === "number" && Number.isInteger(v) && v >= 0 && v < arts.length ? v : 0;
-            });
-          }
-        }
-        out.store.slots[key] = entry;
+    sanitizeSlots(store.slots, SLOT_KEYS, out.store.slots);
+  }
+  const school = r.school as Record<string, unknown> | undefined;
+  if (school && typeof school === "object") {
+    if (Array.isArray(school.steps)) out.school.steps = SCHOOL_STEPS.filter((s) => (school.steps as unknown[]).includes(s));
+    sanitizeSlots(school.slots, SCHOOL_SLOT_KEYS, out.school.slots);
+    const glyphs = school.glyphs as Record<string, unknown> | undefined;
+    if (glyphs && typeof glyphs === "object") {
+      for (const key of GLYPH_KEYS) {
+        const a = sanitizeArt(glyphs[key]);
+        if (a) out.school.glyphs[key] = a;
       }
     }
   }
@@ -111,6 +117,37 @@ export function sanitize(raw: unknown): SaveData {
     if (isBool(st.touchpadPen)) s.touchpadPen = st.touchpadPen;
   }
   return out;
+}
+
+function sanitizeSlots<K extends string>(raw: unknown, keys: readonly K[], out: Partial<Record<K, SlotSave>>): void {
+  const slots = raw as Record<string, unknown> | undefined;
+  if (!slots || typeof slots !== "object") return;
+  for (const key of keys) {
+    const s = slots[key] as Record<string, unknown> | undefined;
+    if (!s || !Array.isArray(s.tints)) continue;
+    const tints = (s.tints as unknown[]).slice(0, 8).map((t) => (isHex(t) ? t : null));
+    if (!tints.length) continue;
+    const entry: SlotSave = { tints };
+    if (Array.isArray(s.drawing)) {
+      const d = (s.drawing as unknown[])
+        .slice(0, 60)
+        .filter(Array.isArray)
+        .map((st) => (st as unknown[]).slice(0, 400).filter((pt): pt is number[] => Array.isArray(pt) && pt.length === 2 && pt.every((n) => Number.isFinite(n))));
+      if (d.length) entry.drawing = d;
+    }
+    if (Array.isArray(s.arts)) {
+      const arts = (s.arts as unknown[]).slice(0, 8).map(sanitizeArt).filter((a): a is Art => a !== null);
+      if (arts.length) {
+        entry.arts = arts;
+        const src = Array.isArray(s.src) ? (s.src as unknown[]) : [];
+        entry.src = tints.map((_, i) => {
+          const v = src[i];
+          return typeof v === "number" && Number.isInteger(v) && v >= 0 && v < arts.length ? v : 0;
+        });
+      }
+    }
+    out[key] = entry;
+  }
 }
 
 export interface Storage {
@@ -139,4 +176,26 @@ export function store(storage: Storage | null, data: SaveData): void {
 
 export function storeProgress(data: SaveData): number {
   return SLOT_KEYS.filter((k) => data.store.slots[k]).length / SLOT_KEYS.length;
+}
+
+/** Classroom restoration units: desks, chairs, the clock, the alphabet strip, the bell. */
+export function schoolUnits(data: SaveData): { done: number; total: number } {
+  const s = data.school;
+  const units = [
+    !!s.slots.desks,
+    !!s.slots.chairs,
+    CLOCK_KEYS.every((k) => s.glyphs[k]),
+    LETTER_KEYS.every((k) => s.glyphs[k]),
+    s.steps.includes("bell")
+  ];
+  return { done: units.filter(Boolean).length, total: units.length };
+}
+
+export function schoolProgress(data: SaveData): number {
+  const u = schoolUnits(data);
+  return u.done / u.total;
+}
+
+export function placeProgress(data: SaveData, place: "store" | "school"): number {
+  return place === "store" ? storeProgress(data) : schoolProgress(data);
 }

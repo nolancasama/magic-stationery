@@ -14,6 +14,7 @@ import { buildDoodle, playDoodle } from "./doodle.ts";
 import type { Made } from "./made.ts";
 import { buildBook, buildCrayon, buildEraser, buildNotebook, buildPencil, buildRuler, buildSchoolbag, buildScissors } from "./stationery.ts";
 import { SURPRISES, type PlayContext } from "./surprises.ts";
+import { buildChair, buildDesk } from "./furniture.ts";
 
 export interface IntroContext {
   effects: Effects;
@@ -164,6 +165,28 @@ export const WORD_KINDS: Record<WordId, WordKind> = {
       await wait(0.25);
       await animate(0.3, (k) => (m.parts.flap.rotation.x = -1.6 * (1 - ease.in(k))));
       audio.bounce(2.2);
+    }
+  },
+  desk: {
+    build: (tint) => buildDesk(tint),
+    tintable: true,
+    async intro(m) {
+      await dropIn(m, 0.5, 0.6);
+      audio.bounce(0.9);
+      await squash(m, 0.12);
+    }
+  },
+  chair: {
+    build: (tint) => buildChair(tint),
+    tintable: true,
+    async intro(m) {
+      // Scoots in and tips back onto its feet.
+      await animate(0.45, (k) => {
+        m.inner.position.z = 0.4 * (1 - ease.out(k));
+        m.inner.rotation.x = Math.sin(k * Math.PI) * -0.25;
+      });
+      audio.bounce(1.2);
+      await squash(m, 0.08);
     }
   }
 };

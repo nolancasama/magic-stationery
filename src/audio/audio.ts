@@ -186,6 +186,22 @@ class AudioEngine {
     });
   }
 
+  /** The school chime (the Westminster melody every Japanese school plays). Returns its length in seconds. */
+  chime(): number {
+    const ctx = this.ctx;
+    const notes = [659, 523, 587, 392, 392, 587, 659, 523];
+    const step = 0.62;
+    if (!ctx) return notes.length * step;
+    const t = ctx.currentTime;
+    notes.forEach((f, i) => {
+      const at = t + i * step + (i >= 4 ? 0.35 : 0);
+      this.tone(f, 1.4, { type: "sine", gain: 0.13, at });
+      this.tone(f * 2, 0.7, { type: "sine", gain: 0.035, at });
+      this.tone(f * 3.01, 0.35, { type: "triangle", gain: 0.012, at });
+    });
+    return notes.length * step + 0.35 + 1;
+  }
+
   coin() {
     const ctx = this.ctx;
     if (!ctx) return;

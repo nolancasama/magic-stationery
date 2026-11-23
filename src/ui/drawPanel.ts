@@ -31,6 +31,12 @@ export interface DrawSpec {
   colorWord?: { en: string; ja: string; hex: string } | null;
   touchpadPen: boolean;
   firstTime?: boolean;
+  /**
+   * Writing a character instead of drawing a thing (Level 2): the title, the
+   * spoken prompt and the bubble come from here, and the paper shows
+   * worksheet-style writing lines.
+   */
+  writing?: { title: string; ja: string; say: string };
 }
 
 export interface Guess {
@@ -169,10 +175,14 @@ export class DrawPanel {
     this.panel.classList.remove("celebrate", "leaving");
     this.pop.classList.remove("show");
     const cw = spec.colorWord;
-    this.title.innerHTML = cw
-      ? `Draw a <span style="color:${cw.hex}">${cw.en}</span> <span class="word">${spec.word}</span>!`
-      : `Draw ${spec.wordWithArticle.replace(spec.word, `<span class="word">${spec.word}</span>`)}!`;
-    this.titleJa.textContent = this.deps.japanese() ? (cw ? `${cw.ja}の ${spec.ja}を かこう！` : `「${spec.ja}」を かこう！`) : "";
+    const wr = spec.writing;
+    this.panel.classList.toggle("writing", !!wr);
+    this.title.innerHTML = wr
+      ? wr.title.replace(spec.word, `<span class="word">${spec.word}</span>`)
+      : cw
+        ? `Draw a <span style="color:${cw.hex}">${cw.en}</span> <span class="word">${spec.word}</span>!`
+        : `Draw ${spec.wordWithArticle.replace(spec.word, `<span class="word">${spec.word}</span>`)}!`;
+    this.titleJa.textContent = this.deps.japanese() ? (wr ? wr.ja : cw ? `${cw.ja}の ${spec.ja}を かこう！` : `「${spec.ja}」を かこう！`) : "";
     this.veil.classList.remove("hidden");
     this.fit();
     this.pick(CRAYONS.find((c) => c.hex === spec.color) ?? this.color, false);
@@ -180,7 +190,8 @@ export class DrawPanel {
     this.help = 0;
     this.setHelp(spec.help);
     this.setTouchpad(spec.touchpadPen, false);
-    this.setBubble(spec.firstTime ? "Draw with your mouse or finger!" : `Draw ${spec.wordWithArticle}!`, spec.firstTime ? "マウスや ゆびで かいてね。できたら ✨ をおしてね！" : "");
+    if (wr) this.setBubble(spec.firstTime ? "Write it big, on the lines!" : wr.say, spec.firstTime ? "せんに あわせて おおきく かいてね。できたら ✨ をおしてね！" : "");
+    else this.setBubble(spec.firstTime ? "Draw with your mouse or finger!" : `Draw ${spec.wordWithArticle}!`, spec.firstTime ? "マウスや ゆびで かいてね。できたら ✨ をおしてね！" : "");
     this.finishBtn.classList.remove("ready");
     this.redraw();
     this.speakPrompt();
@@ -189,7 +200,7 @@ export class DrawPanel {
   private speakPrompt() {
     const spec = this.spec;
     if (!spec) return;
-    const text = spec.colorWord ? `Draw a ${spec.colorWord.en} ${spec.word}!` : `Draw ${spec.wordWithArticle}!`;
+    const text = spec.writing ? spec.writing.say : spec.colorWord ? `Draw a ${spec.colorWord.en} ${spec.word}!` : `Draw ${spec.wordWithArticle}!`;
     void tts.speak(text, PEN_VOICE);
   }
 
@@ -495,7 +506,7 @@ export class DrawPanel {
   private hint() {
     if (!this.spec) return;
     this.setHelp(this.help + 1);
-    void tts.speak(`${this.spec.wordWithArticle}!`, PEN_VOICE);
+    void tts.speak(this.spec.writing ? this.spec.writing.say : `${this.spec.wordWithArticle}!`, PEN_VOICE);
     if (this.help >= 2) this.setBubble("Trace the dotted lines!", "うすい せんを なぞってね！");
     else this.setBubble(`Like this! ${this.spec.word}!`, `${this.spec.ja}`);
   }

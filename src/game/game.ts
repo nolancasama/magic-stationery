@@ -28,18 +28,46 @@ import { h } from "../ui/dom.ts";
 import { DrawPanel } from "../ui/drawPanel.ts";
 import { Hud } from "../ui/hud.ts";
 import { placeLabel, settingsDialog } from "../ui/screens.ts";
-import { DOOR, PENNY_SPOT, ROOM, StoreArea, VIEWS, type Slot, type SlotId, type View } from "../world/areas/store.ts";
+import { PENNY_SPOT, StoreArea } from "../world/areas/store.ts";
+import type { RoomArea, Slot, Spot, View } from "../world/areas/room.ts";
+import { ClassroomArea } from "../world/areas/classroom.ts";
 import { TOWN_VIEW, TownArea, type PlaceId } from "../world/areas/town.ts";
+import { GLYPH_POLICY, glyphExample, glyphName, glyphNameJa, glyphScore, judgeGlyph, splitGlyphs, type GlyphVerdict } from "../recognition/glyphs.ts";
 import { Character } from "../world/characters.ts";
 import { Effects } from "../world/effects.ts";
 import { Engine } from "../world/engine.ts";
 import { worldUniforms } from "../world/materials.ts";
 import { animate, arc, ease, wait } from "../world/tween.ts";
 import { CAST, type CastId } from "./cast.ts";
-import { isBuilt } from "./levels/index.ts";
-import { STORE_STEPS, SLOT_KEYS, load, store as persist, storeProgress, type SaveData, type StoreStep } from "./save.ts";
+import { isBuilt, isOpen } from "./levels/index.ts";
+import {
+  GLYPH_CHARS,
+  SCHOOL_SLOT_KEYS,
+  SCHOOL_STEPS,
+  STORE_STEPS,
+  SLOT_KEYS,
+  load,
+  placeProgress,
+  schoolUnits,
+  store as persist,
+  type GlyphKey,
+  type SaveData,
+  type SchoolStep,
+  type SlotSave,
+  type Step,
+  type StoreStep
+} from "./save.ts";
 
-export type NpcId = "penny" | "ken" | "yui" | "taro";
+export type NpcId = "penny" | "mori" | "ken" | "yui" | "taro";
+/** The level rooms (places with a scene of their own). */
+export type RoomPlace = "store" | "school";
+
+export interface WriteOutcome {
+  /** One drawing per character written (two for "12"). */
+  drawings: Drawing[];
+  rect: DOMRect;
+  how: "model" | "help" | "nomodel";
+}
 
 export interface DrawOutcome {
   drawing: Drawing;
@@ -66,7 +94,9 @@ const COPY_TINTS: Partial<Record<WordId, (string | null)[]>> = {
   ruler: ["#80deea", "#ffab91"],
   book: ["#42a5f5", "#66bb6a", "#ffa726", "#ab47bc", "#ef5350"],
   notebook: ["#81c784", "#ffb74d"],
-  schoolbag: ["#263238", "#6d4c41"]
+  schoolbag: ["#263238", "#6d4c41"],
+  desk: ["#d9a86c", "#c8955a", "#e0b47c"],
+  chair: ["#d9a86c", "#c8955a", "#e0b47c"]
 };
 
 /** How the child's drawing is shown in each display (drawing mode). */
@@ -79,11 +109,13 @@ const DISPLAY: Record<WordId, { fit: Fit; upright?: boolean; hinge?: boolean; en
   scissors: { fit: { w: 0.32, h: 0.44 }, hinge: true, entrance: "snip", tilt: 0 },
   book: { fit: { w: 0.3, h: 0.4 }, hinge: true, entrance: "book", tilt: -0.16 },
   notebook: { fit: { w: 0.34, h: 0.38 }, entrance: "flutter", tilt: -0.5 },
-  schoolbag: { fit: { w: 0.5, h: 0.55 }, entrance: "hop", tilt: 0 }
+  schoolbag: { fit: { w: 0.5, h: 0.55 }, entrance: "hop", tilt: 0 },
+  desk: { fit: { w: 0.85, h: 0.68 }, entrance: "bounce", tilt: 0 },
+  chair: { fit: { w: 0.5, h: 0.78 }, entrance: "hop", tilt: 0 }
 };
 
-const WORD_SLOT: Partial<Record<WordId, SlotId>> = {
-  pencil: "pencilCup", eraser: "erasers", scissors: "scissors", ruler: "rulers", crayon: "crayons", book: "books", notebook: "notebooks", schoolbag: "schoolbags"
+const WORD_SLOT: Partial<Record<WordId, string>> = {
+  pencil: "pencilCup", eraser: "erasers", scissors: "scissors", ruler: "rulers", crayon: "crayons", book: "books", notebook: "notebooks", schoolbag: "schoolbags", desk: "desks", chair: "chairs"
 };
 
 export class Game {
@@ -101,9 +133,15 @@ export class Game {
   readonly storage: Storage | null;
   save: SaveData;
   recognizer: Recognizer | null = null;
-  area: "store" | "town" | null = null;
+  /** Digits and letters (Level 2). */
+  glyphs: Recognizer | null = null;
+  area: RoomPlace | "town" | null = null;
+  /** The level room the player is in (or was last in). */
+  room: RoomArea = this.store;
+  place: RoomPlace = "store";
+  private schoolArea: ClassroomArea | null = null;
   private marker: THREE.Vector3 | null = null;
-  private slotWait: { ids: SlotId[]; resolve: (id: SlotId) => void } | null = null;
+  private slotWait: { ids: string[]; resolve: (id: string) => void } | null = null;
   private placeWait: { resolve: (id: PlaceId) => void } | null = null;
   private labels = new Map<PlaceId, HTMLDivElement>();
   private ambient = new Set<NpcId>();
@@ -114,7 +152,7 @@ export class Game {
   private modelled = new Set<string>();
   readonly events: string[] = [];
   /** The child's artwork per display: arts, and which art each place shows. */
-  readonly slotArt: Partial<Record<SlotId, { arts: Art[]; src: number[] }>> = {};
+  readonly slotArt: Partial<Record<string, { arts: Art[]; src: number[] }>> = {};
   readonly drawingMode = artMode() === "drawing";
 
   constructor(container: HTMLElement) {
@@ -146,6 +184,7 @@ export class Game {
     this.player = new Character(CAST.player.look);
     this.cast = {
       penny: new Character(CAST.penny.look),
+      mori: new Character(CAST.mori.look),
       ken: new Character(CAST.ken.look),
       yui: new Character(CAST.yui.look),
       taro: new Character(CAST.taro.look)
@@ -199,19 +238,54 @@ export class Game {
     window.location.reload();
   }
 
-  stepDone(step: StoreStep): boolean {
-    return this.save.store.steps.includes(step);
+  /** The classroom scene is built the first time it is needed. */
+  get school(): ClassroomArea {
+    return (this.schoolArea ??= new ClassroomArea());
   }
 
-  completeStep(step: StoreStep) {
-    if (!this.save.store.steps.includes(step)) this.save.store.steps.push(step);
-    this.save.store.steps.sort((a, b) => STORE_STEPS.indexOf(a) - STORE_STEPS.indexOf(b));
+  areaOf(place: RoomPlace): RoomArea {
+    return place === "store" ? this.store : this.school;
+  }
+
+  /** The room's host: Ms. Penny in the shop, Ms. Mori in the classroom. */
+  get host(): Character {
+    return this.place === "store" ? this.cast.penny : this.cast.mori;
+  }
+
+  get hostId(): NpcId {
+    return this.place === "store" ? "penny" : "mori";
+  }
+
+  stepDone(step: Step): boolean {
+    return (STORE_STEPS as Step[]).includes(step) ? this.save.store.steps.includes(step as StoreStep) : this.save.school.steps.includes(step as SchoolStep);
+  }
+
+  completeStep(step: Step) {
+    if ((STORE_STEPS as Step[]).includes(step)) {
+      const s = this.save.store.steps;
+      if (!s.includes(step as StoreStep)) s.push(step as StoreStep);
+      s.sort((a, b) => STORE_STEPS.indexOf(a) - STORE_STEPS.indexOf(b));
+    } else {
+      const s = this.save.school.steps;
+      if (!s.includes(step as SchoolStep)) s.push(step as SchoolStep);
+      s.sort((a, b) => SCHOOL_STEPS.indexOf(a) - SCHOOL_STEPS.indexOf(b));
+    }
     this.persist();
     this.log("step:" + step);
+    if (this.area === this.place) this.updateRoomHud();
   }
 
-  slotDone(id: SlotId): boolean {
-    return !!this.save.store.slots[id];
+  /** Saved displays of a room. */
+  slotSaves(place: RoomPlace = this.place): Partial<Record<string, SlotSave>> {
+    return place === "store" ? this.save.store.slots : this.save.school.slots;
+  }
+
+  slotKeys(place: RoomPlace = this.place): string[] {
+    return place === "store" ? SLOT_KEYS : SCHOOL_SLOT_KEYS;
+  }
+
+  slotDone(id: string): boolean {
+    return !!(this.save.store.slots as Record<string, SlotSave | undefined>)[id] || !!(this.save.school.slots as Record<string, SlotSave | undefined>)[id];
   }
 
   log(e: string) {
@@ -221,9 +295,9 @@ export class Game {
   // ------------------------------------------------------------ frame
   private update(dt: number, t: number) {
     this.effects.update(dt);
-    if (this.area === "store") {
-      this.store.update(t);
-      for (const c of [this.player, ...Object.values(this.cast)]) c.update(dt);
+    if (this.area === "store" || this.area === "school") {
+      this.room.update(t);
+      for (const c of [this.player, ...Object.values(this.cast)]) if (c.root.parent === this.room.scene) c.update(dt);
     } else if (this.area === "town") {
       this.town.update(t);
       this.player.update(dt);
@@ -248,20 +322,22 @@ export class Game {
     canvas.addEventListener("pointerdown", (e) => {
       audio.unlock();
       if (this.draw.isOpen) return;
-      if (this.area === "store") this.clickStore(e.clientX, e.clientY);
-      else if (this.area === "town") this.clickTown(e.clientX, e.clientY);
+      if (this.area === "town") this.clickTown(e.clientX, e.clientY);
+      else if (this.area) this.clickRoom(e.clientX, e.clientY);
     });
     canvas.addEventListener("pointermove", (e) => {
       if (!this.area) return;
-      const objs = this.area === "store" ? this.store.pickables : this.town.pickables;
+      const objs = this.area === "town" ? this.town.pickables : this.room.pickables;
       const hit = this.engine.pick(e.clientX, e.clientY, objs);
       canvas.style.cursor = hit ? "pointer" : "default";
     });
   }
 
-  private clickStore(x: number, y: number) {
-    const hit = this.engine.pick(x, y, this.store.pickables);
-    const id = hit?.object.userData.slot as SlotId | undefined;
+  private clickRoom(x: number, y: number) {
+    // A spot the game is waiting for wins over any other spot in front of it (desks and chairs overlap).
+    const waited = this.slotWait ? this.room.pickables.filter((o) => this.slotWait?.ids.includes(o.userData.slot)) : [];
+    const hit = (waited.length ? this.engine.pick(x, y, waited) : null) ?? this.engine.pick(x, y, this.room.pickables);
+    const id = hit?.object.userData.slot as string | undefined;
     if (id && this.slotWait?.ids.includes(id)) {
       const w = this.slotWait;
       this.slotWait = null;
@@ -269,14 +345,15 @@ export class Game {
       w.resolve(id);
       return;
     }
-    if (id) {
-      const slot = this.store.slots[id];
+    const slot = id ? this.room.slots[id] : undefined;
+    if (slot && id) {
       const w = WORDS[slot.word];
       this.hud.say(this.slotDone(id) ? `${capital(w.plural)}!` : `${capital(w.plural)}… not now.`, this.slotDone(id) ? w.ja : `${w.ja}… あとでね`, 1600);
       return;
     }
+    if (id) return;
     if (this.scripting && !this.slotWait) return;
-    const floor = this.engine.pick(x, y, [this.store.floor]);
+    const floor = this.engine.pick(x, y, [this.room.floor]);
     if (floor) void this.player.go(floor.point.x, floor.point.z);
   }
 
@@ -288,6 +365,10 @@ export class Game {
       if (!isBuilt(id)) {
         const p = this.town.places[id];
         this.hud.say(`${p.name}: coming soon!`, `${p.ja}は もうすぐ オープン！`, 2200);
+        return;
+      }
+      if (!isOpen(id, this.save)) {
+        this.hud.say("Help Ms. Penny's shop first!", "まず ぶんぼうぐやを たすけよう！", 2200);
         return;
       }
       const w = this.placeWait;
@@ -308,48 +389,71 @@ export class Game {
   }
 
   enterStore() {
-    this.area = "store";
-    this.engine.setScene(this.store.scene);
-    this.store.scene.add(this.effects.points);
+    this.enterRoom("store");
+  }
+
+  enterSchool() {
+    this.enterRoom("school");
+  }
+
+  /** Walk into a level room: the player at the door, the host at work, saved things in place. */
+  enterRoom(place: RoomPlace) {
+    this.area = place;
+    this.place = place;
+    this.room = this.areaOf(place);
+    const room = this.room;
+    this.ambient.clear();
+    // People belong to one scene at a time.
+    this.player.root.removeFromParent();
+    for (const c of Object.values(this.cast)) {
+      c.root.removeFromParent();
+      this.dropFromHand(c);
+    }
+    this.engine.setScene(room.scene);
+    room.scene.add(this.effects.points);
     for (const l of this.labels.values()) l.remove();
     this.labels.clear();
     const add = (c: Character) => {
-      if (!c.root.parent) this.store.scene.add(c.root);
-      c.collide = (x, z, r) => this.store.nav.collides(x, z, r);
-      c.router = (ax, az, bx, bz) => this.store.nav.route(ax, az, bx, bz);
+      room.scene.add(c.root);
+      c.collide = (x, z, r) => room.nav.collides(x, z, r);
+      c.router = (ax, az, bx, bz) => room.nav.route(ax, az, bx, bz);
     };
     add(this.player);
-    add(this.cast.penny);
-    this.player.place(DOOR.x - 0.6, DOOR.z, -Math.PI / 2);
-    this.cast.penny.place(PENNY_SPOT.x, PENNY_SPOT.z, 0);
+    add(this.host);
+    this.player.place(room.door.x - 0.6, room.door.z, -Math.PI / 2);
+    this.host.place(room.hostSpot.x, room.hostSpot.z, room.hostSpot.facing);
     this.rebuildSlots();
-    this.setStoreLevel(this.storeLevel(), true);
-    this.focus(VIEWS.overview, true);
+    this.setRoomLevel(this.roomLevel(), true);
+    this.focus(room.views.overview, true);
     this.hud.setVisible(true);
     this.hud.showPen(this.stepDone("pen"));
-    this.updateStoreHud();
+    this.updateRoomHud();
     music.start();
   }
 
-  enterTown(fromStore: boolean) {
+  enterTown(from: PlaceId | null) {
     this.area = "town";
     this.engine.setScene(this.town.scene);
     this.town.scene.add(this.effects.points);
     this.ambient.clear();
-    if (!this.player.root.parent || this.player.root.parent !== this.town.scene) this.town.scene.add(this.player.root);
+    for (const c of [this.player, ...Object.values(this.cast)]) c.root.removeFromParent();
+    this.town.scene.add(this.player.root);
     this.player.collide = (x, z, r) => this.town.nav.collides(x, z, r);
     this.player.router = (ax, az, bx, bz) => this.town.nav.route(ax, az, bx, bz);
-    const door = this.town.places.store.door;
-    if (fromStore) this.player.place(door.x + 0.5, door.z + 0.6, 1.2);
-    else this.player.place(0, 5.2, Math.PI);
-    const level = storeProgress(this.save);
-    this.town.setPlaceLevel("store", 0.08 + 0.92 * level);
-    this.town.setPlazaLevel(0.1 + 0.18 * level);
+    if (from) {
+      const door = this.town.places[from].door;
+      this.player.place(door.x + 0.5, door.z + 0.6, 1.2);
+    } else this.player.place(0, 5.2, Math.PI);
+    const store = placeProgress(this.save, "store");
+    const school = placeProgress(this.save, "school");
+    this.town.setPlaceLevel("store", 0.08 + 0.92 * store);
+    this.town.setPlaceLevel("school", 0.08 + 0.92 * school);
+    this.town.setPlazaLevel(0.1 + 0.18 * store + 0.18 * school);
     this.engine.focus(TOWN_VIEW.pos, TOWN_VIEW.look, true);
     this.engine.setLensShift(0);
     this.hud.setPlace("Magic Town", "まほうの まち", 0, 0);
-    if (level < 1) this.hud.setObjective("Go to the Stationery Store!", "ぶんぼうぐやに いこう！");
-    else this.hud.setObjective(null);
+    const next = this.nextPlace();
+    this.hud.setObjective(next ? next.en : null, next?.ja ?? "");
     this.hud.showPen(this.stepDone("pen"));
     for (const id of Object.keys(this.town.places) as PlaceId[]) {
       const p = this.town.places[id];
@@ -357,44 +461,71 @@ export class Game {
       if (id === "store") {
         const done = SLOT_KEYS.filter((k) => this.save.store.slots[k]).length;
         el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">★ ${done} / ${SLOT_KEYS.length}</span>`;
+      } else if (id === "school" && isOpen("school", this.save)) {
+        const u = schoolUnits(this.save);
+        el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">★ ${u.done} / ${u.total}</span>`;
       } else {
         el.classList.add("locked");
-        el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">🔒 Coming soon</span>`;
+        el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">🔒 ${isBuilt(id) ? "Help the shop first" : "Coming soon"}</span>`;
       }
       this.labels.set(id, el);
     }
-    this.marker = level < 1 ? this.town.places.store.label.clone().add(new THREE.Vector3(0, 0.9, 0)) : null;
-    music.setLevel(0.1 + 0.2 * level);
+    this.marker = next ? this.town.places[next.place].label.clone().add(new THREE.Vector3(0, 0.9, 0)) : null;
+    music.setLevel(0.1 + 0.2 * store + 0.2 * school);
     music.start();
+  }
+
+  /** The next place to restore, if any (the town's objective). */
+  nextPlace(): { place: RoomPlace; en: string; ja: string } | null {
+    if (placeProgress(this.save, "store") < 1) return { place: "store", en: "Go to the Stationery Store!", ja: "ぶんぼうぐやに いこう！" };
+    if (placeProgress(this.save, "school") < 1) return { place: "school", en: "Go to the School!", ja: "がっこうに いこう！" };
+    return null;
   }
 
   waitPlace(): Promise<PlaceId> {
     return new Promise((resolve) => (this.placeWait = { resolve }));
   }
 
-  storeLevel(): number {
-    return 0.1 + 0.9 * storeProgress(this.save);
+  roomLevel(place: RoomPlace = this.place): number {
+    return 0.1 + 0.9 * placeProgress(this.save, place);
   }
 
-  private setStoreLevel(level: number, snap: boolean) {
+  private setRoomLevel(level: number, snap: boolean) {
     if (snap) worldUniforms.uRestore.value = level;
-    this.store.setLevel(storeProgress(this.save));
-    music.setLevel(storeProgress(this.save));
+    const p = placeProgress(this.save, this.place);
+    this.room.setLevel(p);
+    music.setLevel(p);
   }
 
-  updateStoreHud() {
-    const done = SLOT_KEYS.filter((k) => this.save.store.slots[k]).length;
-    this.hud.setPlace("Penny's Stationery", "ぶんぼうぐや", done, SLOT_KEYS.length);
+  updateRoomHud() {
+    if (this.place === "store") {
+      const done = SLOT_KEYS.filter((k) => this.save.store.slots[k]).length;
+      this.hud.setPlace("Penny's Stationery", "ぶんぼうぐや", done, SLOT_KEYS.length);
+    } else {
+      const u = schoolUnits(this.save);
+      this.hud.setPlace("Ms. Mori's Classroom", "もり先生の きょうしつ", u.done, u.total);
+    }
+  }
+
+  /** Restoration went up: colour spreads from `from`, the room's decor and music follow. */
+  progressed(from: THREE.Vector3, before: number) {
+    const after = placeProgress(this.save, this.place);
+    void this.colourWave(from, 0.1 + 0.9 * before, 0.1 + 0.9 * after);
+    this.room.setLevel(after);
+    music.setLevel(after);
+    this.updateRoomHud();
+    audio.fanfare();
   }
 
   /** Rebuild saved items in their slots (no animation). */
   private rebuildSlots() {
-    for (const id of SLOT_KEYS) {
-      const slot = this.store.slots[id];
-      for (const m of slot.items) this.store.scene.remove(m.root);
+    const saves = this.slotSaves();
+    for (const id of this.slotKeys()) {
+      const slot = this.room.slots[id];
+      for (const m of slot.items) this.room.scene.remove(m.root);
       slot.items = [];
       slot.ghosts.forEach((g) => (g.visible = true));
-      const saved = this.save.store.slots[id];
+      const saved = saves[id];
       if (!saved) continue;
       const arts = saved.arts?.length ? saved.arts : [this.legacyArt(slot.word, saved.drawing)];
       const src = saved.src ?? saved.tints.map(() => 0);
@@ -404,11 +535,12 @@ export class Game {
         if (!a) return;
         const m = this.makeItem(slot.word, i, arts[src[i] ?? 0] ?? arts[0], tint);
         this.placeItem(slot, i, m);
-        this.store.scene.add(m.root);
+        this.room.scene.add(m.root);
         slot.items.push(m);
         slot.ghosts[i].visible = false;
       });
     }
+    if (this.room === this.schoolArea) this.school.rebuildWriting(this.save.school.glyphs, this.drawingMode);
   }
 
   /** Artwork for saves made before drawings were kept (their lines, in magic ink). */
@@ -477,24 +609,25 @@ export class Game {
         const len = to.length();
         ray.set(from, to.normalize());
         ray.far = len;
-        const hit = ray.intersectObjects(this.store.solids, false)[0];
+        const hit = ray.intersectObjects(this.room.solids, false)[0];
         ray.far = Infinity;
         return !hit || hit.distance > len - 0.3;
       });
+    const room = this.room.bounds;
     for (const back of [1.3, 1.9, 0.6]) {
       for (const off of [2.4, 1.7, 3.0]) {
         for (const s of [firstSide, -firstSide]) {
           for (const hgt of [2.2, 2.9]) {
             const c = pa.clone().addScaledVector(dir, -back).addScaledVector(side, s * off);
             c.y = hgt;
-            c.x = Math.max(-4.2, Math.min(4.2, c.x));
-            c.z = Math.max(-2.7, Math.min(6, c.z));
+            c.x = Math.max(room.minX + 0.25, Math.min(room.maxX - 0.25, c.x));
+            c.z = Math.max(room.minZ + 0.25, Math.min(room.maxZ + 3.05, c.z));
             if (clear(c)) return { pos: c, look };
           }
         }
       }
     }
-    return { pos: VIEWS.overview.pos.clone(), look };
+    return { pos: this.room.views.overview.pos.clone(), look };
   }
 
   setMarker(p: THREE.Vector3 | null) {
@@ -504,7 +637,7 @@ export class Game {
   // ------------------------------------------------------------ talking
   charOf(who: Speaker): Character | null {
     if (who === "player") return this.player;
-    if (who === "penny" || who === "ken" || who === "yui" || who === "taro") return this.cast[who];
+    if (who === "penny" || who === "mori" || who === "ken" || who === "yui" || who === "taro") return this.cast[who];
     return null;
   }
 
@@ -552,21 +685,27 @@ export class Game {
     this.setMarker(at);
   }
 
-  /** Wait until the child clicks one of these slots; the player walks there. */
-  async waitSlot(ids: SlotId[]): Promise<SlotId> {
+  spotOf(id: string): Spot {
+    return this.room.slots[id] ?? this.room.spots[id];
+  }
+
+  /** Wait until the child clicks one of these slots or spots; the player walks there. */
+  async waitSlot<T extends string>(ids: T[], view: View = this.room.views.overview): Promise<T> {
     this.dialogue.hide();
     this.engine.setLensShift(0);
-    this.focus(VIEWS.overview);
-    const id = await new Promise<SlotId>((resolve) => (this.slotWait = { ids, resolve }));
+    this.focus(view);
+    const id = (await new Promise<string>((resolve) => (this.slotWait = { ids, resolve }))) as T;
     this.setMarker(null);
-    const slot = this.store.slots[id];
-    await this.player.go(slot.stand.x, slot.stand.z);
-    this.player.faceTo(slot.anchors[0].p.x, slot.anchors[0].p.z);
+    const slot = this.room.slots[id];
+    const spot = this.spotOf(id);
+    await this.player.go(spot.stand.x, spot.stand.z);
+    const face = slot ? slot.anchors[0].p : this.room.spots[id].face;
+    this.player.faceTo(face.x, face.z);
     return id;
   }
 
-  /** Test hook: click a slot. */
-  clickSlot(id: SlotId): boolean {
+  /** Test hook: click a slot or spot. */
+  clickSlot(id: string): boolean {
     if (!this.slotWait?.ids.includes(id)) return false;
     const w = this.slotWait;
     this.slotWait = null;
@@ -575,7 +714,7 @@ export class Game {
   }
 
   clickPlace(id: PlaceId): boolean {
-    if (!this.placeWait || id !== "store") return false;
+    if (!this.placeWait || !isBuilt(id) || !isOpen(id, this.save)) return false;
     const w = this.placeWait;
     this.placeWait = null;
     w.resolve(id);
@@ -592,6 +731,7 @@ export class Game {
 
   // ------------------------------------------------------------ drawing
   private guess(d: Drawing) {
+    if (this.writingTarget) return this.guessGlyph(d, this.writingTarget);
     const r = this.recognizer;
     const word = this.drawingWord;
     if (!r) return null;
@@ -605,7 +745,7 @@ export class Game {
   private drawingWord: WordId | null = null;
 
   /** The full drawing loop for one target: help ladder, surprises, unclear tries. */
-  async drawFor(word: WordId, near: Slot, opts: DrawOptions = {}): Promise<DrawOutcome> {
+  async drawFor(word: WordId, near: Spot, opts: DrawOptions = {}): Promise<DrawOutcome> {
     const w = WORDS[word];
     let misses = 0;
     const startHelp = Math.max(opts.help ?? 0, this.save.settings.help === "extra" ? 2 : 0);
@@ -673,15 +813,20 @@ export class Game {
   }
 
   /** The wrong thing appears and plays, people react, then it goes puff. */
-  private async surprise(label: string, drawing: Drawing, rect: DOMRect, near: Slot, word: WordId) {
-    const spot = new THREE.Vector3(Math.max(-3.2, Math.min(3.8, near.stand.x + 0.9)), 0, Math.max(1.2, Math.min(ROOM.maxZ - 0.8, near.stand.z + 0.5)));
-    if (this.store.nav.collides(spot.x, spot.z, 0.3)) {
-      const [fx, fz] = this.store.nav.nearestFree(spot.x, spot.z);
+  private async surprise(label: string, drawing: Drawing, rect: DOMRect, near: Spot, word: WordId) {
+    const B = this.room.bounds;
+    const scene = this.room.scene;
+    const nav = this.room.nav;
+    // The front part of the room (towards the camera), clear of the walls.
+    const front = B.minZ + 0.7 * (B.maxZ - B.minZ);
+    const spot = new THREE.Vector3(Math.max(B.minX + 1.25, Math.min(B.maxX - 0.65, near.stand.x + 0.9)), 0, Math.max(front, Math.min(B.maxZ - 0.8, near.stand.z + 0.5)));
+    if (nav.collides(spot.x, spot.z, 0.3)) {
+      const [fx, fz] = nav.nearestFree(spot.x, spot.z);
       spot.set(fx, 0, fz);
     }
     // Frame the spot where it appears, with room to play around it.
-    this.focus({ pos: new THREE.Vector3(spot.x + 0.6, 2.6, Math.min(spot.z + 3.8, 6.2)), look: new THREE.Vector3(spot.x, 0.55, spot.z - 0.2) });
-    const roam = { minX: Math.max(-3.4, spot.x - 1.6), maxX: Math.min(ROOM.maxX - 0.5, spot.x + 1.6), minZ: Math.max(0.95, spot.z - 0.6), maxZ: Math.min(ROOM.maxZ - 0.3, spot.z + 1.3) };
+    this.focus({ pos: new THREE.Vector3(spot.x + 0.6, 2.6, Math.min(spot.z + 3.8, B.maxZ + 3.25)), look: new THREE.Vector3(spot.x, 0.55, spot.z - 0.2) });
+    const roam = { minX: Math.max(B.minX + 1.05, spot.x - 1.6), maxX: Math.min(B.maxX - 0.5, spot.x + 1.6), minZ: Math.max(front - 0.25, spot.z - 0.6), maxZ: Math.min(B.maxZ - 0.3, spot.z + 1.3) };
     let made: Made;
     let play: Promise<void>;
     if (this.drawingMode) {
@@ -689,25 +834,119 @@ export class Game {
       const b = behaviourOf(label);
       const m = buildLiving(artFromDrawing(drawing), fitFor(b), { shadow: true, glow: true, label });
       const yaw = Math.atan2(this.engine.goalPos.x - spot.x, this.engine.goalPos.z - spot.z);
-      await bringToLife(this.engine, this.store.scene, this.effects, m, screenBox(drawing, rect), spot, new THREE.Euler(0, yaw, 0));
+      await bringToLife(this.engine, scene, this.effects, m, screenBox(drawing, rect), spot, new THREE.Euler(0, yaw, 0));
       made = m;
       audio.animal(label);
       play = playLiving(m, b, { effects: this.effects, roam, camera: this.engine.camPos });
     } else {
       const crayon = dominantCrayon(drawing);
       const thing = buildSurprise(label, crayon ? new THREE.Color(crayon.hex) : null, drawing);
-      await flySketch(this.engine, this.store.scene, this.effects, drawing, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, size: rect.height * 0.8 }, spot.clone().setY(0.4), 0.5);
-      await materialize(this.store.scene, this.effects, thing.made, spot, Math.atan2(this.engine.camPos.x - spot.x, this.engine.camPos.z - spot.z));
+      await flySketch(this.engine, scene, this.effects, drawing, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, size: rect.height * 0.8 }, spot.clone().setY(0.4), 0.5);
+      await materialize(scene, this.effects, thing.made, spot, Math.atan2(this.engine.camPos.x - spot.x, this.engine.camPos.z - spot.z));
       made = thing.made;
       audio.animal(label);
       play = thing.play({ effects: this.effects, roam, camera: this.engine.camPos });
     }
     this.hud.say(`${capital(withArticle(label))}!`, "", 2400);
-    this.cast.penny.emote("laugh", 2.2);
+    this.host.emote("laugh", 2.2);
     this.player.emote("surprised", 1.4);
-    await Promise.all([play, this.dialogue.announce("penny", `${capital(withArticle(label))}! Ha ha! But it's not ${wordWithArticle(word)}.`, this.save.settings.japanese ? `わあ、おもしろい！ でも ${WORDS[word].ja}じゃないね。` : undefined)]);
-    await poof(this.store.scene, this.effects, made);
+    await Promise.all([play, this.dialogue.announce(this.hostId, `${capital(withArticle(label))}! Ha ha! But it's not ${wordWithArticle(word)}.`, this.save.settings.japanese ? `わあ、おもしろい！ でも ${WORDS[word].ja}じゃないね。` : undefined)]);
+    await poof(scene, this.effects, made);
     this.dialogue.hide();
+  }
+
+  // ------------------------------------------------------------ writing (Level 2)
+  private writingTarget: string | null = null;
+
+  private guessGlyph(d: Drawing, target: string) {
+    const r = this.glyphs;
+    if (!r) return null;
+    const parts = splitGlyphs(strokesOf(d), target.length);
+    if (!parts) return null;
+    const chars = [...target];
+    const ok = parts.every((p, i) => {
+      const rec = r.recognize(p);
+      return rec.ink >= GLYPH_POLICY.minInk * 0.8 && glyphScore(rec, chars[i]) >= 0.4;
+    });
+    return ok ? { text: `"${target}"`, isTarget: true } : null;
+  }
+
+  /**
+   * Write a character (or two side by side, "12") at a spot: the same help
+   * ladder as drawing (example, then a stencil to trace, then the pen helps).
+   */
+  async writeGlyph(target: string, near: Spot, opts: { firstTime?: boolean } = {}): Promise<WriteOutcome> {
+    const chars = [...target];
+    let misses = 0;
+    const startHelp = this.save.settings.help === "extra" ? 2 : 0;
+    const name = glyphName(target);
+    const goal = `Write ${name}!`;
+    const goalJa = `${glyphNameJa(target)}を かこう！`;
+    this.writingTarget = target;
+    this.focus(near.view);
+    const openPanel = () => {
+      this.dialogue.hide();
+      this.engine.setLensShift(0);
+      this.draw.open({
+        word: target,
+        wordWithArticle: name,
+        ja: target,
+        help: Math.max(startHelp, misses >= 2 ? 2 : misses),
+        example: glyphExample(target),
+        touchpadPen: this.save.settings.touchpadPen,
+        firstTime: opts.firstTime && misses === 0,
+        writing: { title: `Write ${name}!`, ja: goalJa, say: `Write ${name}!` }
+      });
+      this.engine.renderEvery = 2;
+      this.objective(goal, goalJa);
+    };
+    openPanel();
+    for (;;) {
+      const ev = await this.draw.next();
+      if (ev.kind === "cancel") {
+        this.draw.hide();
+        this.engine.renderEvery = 1;
+        this.objective(goal, goalJa, near.marker);
+        await this.waitSlot([near.id]);
+        this.setMarker(null);
+        openPanel();
+        continue;
+      }
+      const strokes = strokesOf(ev.drawing);
+      const parts = splitGlyphs(strokes, chars.length);
+      const toDrawing = (ps: typeof strokes): Drawing => ({ strokes: ev.drawing.strokes.filter((s) => ps.includes(s.points)) });
+      let verdict: GlyphVerdict;
+      if (!this.glyphs) verdict = { kind: "accept", how: "help", score: 0 };
+      else if (!parts) verdict = misses + 1 >= GLYPH_POLICY.helpAfter ? { kind: "accept", how: "help", score: 0 } : { kind: "unclear", reason: "unsure", countsAsMiss: true };
+      else {
+        const vs = parts.map((p, i) => judgeGlyph((this.glyphs as Recognizer).recognize(p), chars[i], misses));
+        verdict = vs.find((v) => v.kind !== "accept") ?? vs[0];
+        if (vs.every((v) => v.kind === "accept")) verdict = vs.some((v) => v.kind === "accept" && v.how === "help") ? { kind: "accept", how: "help", score: 0 } : vs[0];
+      }
+      this.log(`write:${target}:${verdict.kind}${verdict.kind === "other" ? ":" + verdict.label : ""}`);
+      if (verdict.kind === "accept") {
+        await this.draw.celebrate(target);
+        await this.draw.leave();
+        this.engine.renderEvery = 1;
+        this.writingTarget = null;
+        this.objective(null);
+        if (verdict.how === "help" && this.glyphs) this.hud.say("The magic pen helped you!", "まほうのペンが てつだってくれたよ！");
+        const drawings = parts && parts.length === chars.length ? parts.map(toDrawing) : [ev.drawing];
+        return { drawings, rect: ev.rect, how: this.glyphs ? verdict.how : "nomodel" };
+      }
+      if (verdict.kind === "other") {
+        misses++;
+        this.draw.setHelp(misses >= 2 ? 2 : misses);
+        this.draw.feedback(`That looks like "${verdict.label}"! Write "${target}".`, `それは「${verdict.label}」みたい。「${target}」を かいてね！`);
+        continue;
+      }
+      if (verdict.countsAsMiss) misses++;
+      this.draw.setHelp(misses >= 2 ? 2 : misses);
+      if (verdict.reason === "tooLittle") this.draw.feedback("Write it bigger!", "もっと おおきく かいてね！");
+      else if (!parts) this.draw.feedback(`Write ${chars.join(" and ")}, side by side!`, `${chars.join(" と ")}を ならべて かいてね！`);
+      else if (verdict.reason === "scribble") this.draw.feedback(`Hmm… a scribble? Look at the hint!`, "うーん、ぐるぐる？ ヒントを みてね！");
+      else this.draw.feedback(`Hmm… I can't read it. Look at the hint!`, "うーん、よめないなあ。ヒントを みてね！");
+    }
   }
 
   // ------------------------------------------------------------ restoring
@@ -715,8 +954,8 @@ export class Game {
    * Turn an accepted drawing into the slot's first object (flight, unfold,
    * entrance), then let the magic fill the other places. Saves the slot.
    */
-  async restore(id: SlotId, out: DrawOutcome, opts: { anchor?: number; fill?: boolean; tints?: (string | null)[]; save?: boolean } = {}): Promise<Made> {
-    const slot = this.store.slots[id];
+  async restore(id: string, out: DrawOutcome, opts: { anchor?: number; fill?: boolean; tints?: (string | null)[]; save?: boolean } = {}): Promise<Made> {
+    const slot = this.room.slots[id];
     const kind = WORD_KINDS[slot.word];
     const index = opts.anchor ?? 0;
     const a = slot.anchors[index];
@@ -734,13 +973,13 @@ export class Game {
       this.placeItem(slot, index, m);
       const at = m.root.position.clone();
       const rot = m.root.rotation.clone();
-      await bringToLife(this.engine, this.store.scene, this.effects, m as Living, screenBox(out.drawing, out.rect), at, rot);
+      await bringToLife(this.engine, this.room.scene, this.effects, m as Living, screenBox(out.drawing, out.rect), at, rot);
       await ENTRANCES[DISPLAY[slot.word].entrance](m as Living);
     } else {
       m.root.scale.setScalar(a.s ?? 1);
       const r = out.rect;
-      await flySketch(this.engine, this.store.scene, this.effects, out.drawing, { x: r.left + r.width / 2, y: r.top + r.height / 2, size: r.height * 0.8 }, a.p.clone().add(new THREE.Vector3(0, m.height * 0.6, 0)), Math.max(0.35, m.height * 1.2));
-      await materialize(this.store.scene, this.effects, m, a.p, a.r);
+      await flySketch(this.engine, this.room.scene, this.effects, out.drawing, { x: r.left + r.width / 2, y: r.top + r.height / 2, size: r.height * 0.8 }, a.p.clone().add(new THREE.Vector3(0, m.height * 0.6, 0)), Math.max(0.35, m.height * 1.2));
+      await materialize(this.room.scene, this.effects, m, a.p, a.r);
       await kind.intro(m, { effects: this.effects });
     }
     slot.items[index] = m;
@@ -751,8 +990,8 @@ export class Game {
   }
 
   /** The magic copies the drawing(s) into the rest of the display. */
-  async fillSlot(id: SlotId, from: number, tints?: (string | null)[]) {
-    const slot = this.store.slots[id];
+  async fillSlot(id: string, from: number, tints?: (string | null)[]) {
+    const slot = this.room.slots[id];
     const base = slot.anchors[from].p.clone();
     const rec = (this.slotArt[id] ??= { arts: [], src: [] });
     const jobs: Promise<void>[] = [];
@@ -770,26 +1009,30 @@ export class Game {
       const at = m.root.position.clone();
       const rot = m.root.rotation.clone();
       const scale = m.root.scale.x;
-      jobs.push(wait(0.18 * k).then(() => copyFrom(this.store.scene, this.effects, base, m, at, rot)).then(() => void m.root.scale.setScalar(scale)));
+      jobs.push(wait(0.18 * k).then(() => copyFrom(this.room.scene, this.effects, base, m, at, rot)).then(() => void m.root.scale.setScalar(scale)));
       k++;
     }
     await Promise.all(jobs);
   }
 
-  saveSlot(id: SlotId, drawing: Drawing | null) {
-    const slot = this.store.slots[id];
+  saveSlot(id: string, drawing: Drawing | null) {
+    const slot = this.room.slots[id];
     const tints = slot.items.map((m) => (m?.tint ? "#" + m.tint.getHexString() : null));
     const simplified = drawing ? simplifyLikeQuickDraw(strokesOf(drawing)).map((s) => s.map(([x, y]) => [x, y])) : undefined;
     const rec = this.slotArt[id];
-    const before = storeProgress(this.save);
-    this.save.store.slots[id] = { tints, drawing: simplified, arts: rec?.arts.slice(), src: rec ? slot.items.map((_, i) => rec.src[i] ?? 0) : undefined };
+    const before = placeProgress(this.save, this.place);
+    (this.slotSaves() as Record<string, SlotSave>)[id] = { tints, drawing: simplified, arts: rec?.arts.slice(), src: rec ? slot.items.map((_, i) => rec.src[i] ?? 0) : undefined };
     this.persist();
-    const after = storeProgress(this.save);
-    void this.colourWave(slot.anchors[0].p, 0.1 + 0.9 * before, 0.1 + 0.9 * after);
-    this.store.setLevel(after);
-    music.setLevel(after);
-    this.updateStoreHud();
-    audio.fanfare();
+    this.progressed(slot.anchors[0].p, before);
+  }
+
+  /** Keep a written character (the child's handwriting) and show it in the classroom. */
+  saveGlyph(key: GlyphKey, art: Art, from: THREE.Vector3) {
+    const before = placeProgress(this.save, "school");
+    this.save.school.glyphs[key] = art;
+    this.persist();
+    if (placeProgress(this.save, "school") > before) this.progressed(from, before);
+    else this.updateRoomHud();
   }
 
   /** Colour spreads from a restored object across the room. */
@@ -805,44 +1048,52 @@ export class Game {
   }
 
   // ------------------------------------------------------------ people
-  async npcEnter(id: NpcId, x: number, z: number) {
+  /** Let a character walk in this room (collisions and routes on its floor). */
+  inRoom(c: Character) {
+    const room = this.room;
+    if (c.root.parent !== room.scene) room.scene.add(c.root);
+    c.collide = (px, pz, r) => room.nav.collides(px, pz, r);
+    c.router = (ax, az, bx, bz) => room.nav.route(ax, az, bx, bz);
+  }
+
+  async npcEnter(id: NpcId, x: number, z: number, opts: { keepDoor?: boolean; frame?: boolean } = {}) {
     const c = this.cast[id];
+    const room = this.room;
+    const door = room.door;
     this.ambient.delete(id);
-    if (!c.root.parent) this.store.scene.add(c.root);
-    c.collide = (px, pz, r) => this.store.nav.collides(px, pz, r);
-    c.router = (ax, az, bx, bz) => this.store.nav.route(ax, az, bx, bz);
-    c.place(DOOR.outsideX, DOOR.z, -Math.PI / 2);
+    this.inRoom(c);
+    c.place(door.outsideX, door.z, -Math.PI / 2);
     // The doorway is outside the walkable room: no collision until they are inside.
     c.collide = null;
     c.router = null;
-    this.focus(VIEWS.door);
+    if (opts.frame !== false) this.focus(room.views.door);
     audio.door();
-    await animate(0.4, (k) => this.store.setDoor(ease.out(k)));
-    await c.walkTo(DOOR.x - 0.7, DOOR.z);
-    c.collide = (px, pz, r) => this.store.nav.collides(px, pz, r);
-    c.router = (ax, az, bx, bz) => this.store.nav.route(ax, az, bx, bz);
-    void animate(0.5, (k) => this.store.setDoor(1 - ease.inOut(k)));
+    await animate(0.4, (k) => room.setDoor(ease.out(k)));
+    await c.walkTo(door.x - 0.7, door.z);
+    this.inRoom(c);
+    if (!opts.keepDoor) void animate(0.5, (k) => room.setDoor(1 - ease.inOut(k)));
     await c.go(x, z);
   }
 
   async npcLeave(id: NpcId) {
     const c = this.cast[id];
+    const room = this.room;
     this.ambient.delete(id);
-    await c.go(DOOR.x - 0.7, DOOR.z);
+    await c.go(room.door.x - 0.7, room.door.z);
     audio.door();
-    await animate(0.3, (k) => this.store.setDoor(ease.out(k)));
+    await animate(0.3, (k) => room.setDoor(ease.out(k)));
     c.collide = null;
     c.router = null;
-    await c.walkTo(DOOR.outsideX, DOOR.z);
-    this.store.scene.remove(c.root);
-    void animate(0.4, (k) => this.store.setDoor(1 - k));
+    await c.walkTo(room.door.outsideX, room.door.z);
+    room.scene.remove(c.root);
+    void animate(0.4, (k) => room.setDoor(1 - k));
   }
 
   /** Fly an object (a new copy of a word kind) into a character's hand. */
   async giveTo(c: Character, word: WordId, fromPos: THREE.Vector3, tint: string | null = null): Promise<Made> {
     const m = this.makeItem(word, 1, this.artFor(word), tint);
     m.root.position.copy(fromPos);
-    this.store.scene.add(m.root);
+    this.room.scene.add(m.root);
     const to = new THREE.Vector3();
     audio.whoosh(0.4);
     const start = fromPos.clone();
@@ -853,7 +1104,7 @@ export class Game {
       m.root.rotation.y = k * Math.PI * 2;
       if (Math.random() < 0.5) this.effects.twinkle(m.root.position, 0.1);
     });
-    this.store.scene.remove(m.root);
+    this.room.scene.remove(m.root);
     m.root.position.set(0, 0, 0);
     m.root.rotation.set(0, 0, 0);
     m.root.scale.setScalar(0.8 / (c.look.scale ?? 1));
@@ -908,23 +1159,18 @@ export class Game {
 
   private async ambientLoop(id: NpcId) {
     const c = this.cast[id];
-    const spots: [number, number, SlotId | null][] = [
-      [0.1, -1.8, "books"],
-      [3.1, -1.8, "schoolbags"],
-      [0.9, 1.45, "crayons"],
-      [2.5, 1.45, "notebooks"],
-      [-2.0, 0.45, null],
-      [1.8, 2.3, null]
-    ];
+    const room = this.room;
+    const place = this.place;
+    const spots = room.ambientSpots;
     let n = Math.floor(Math.random() * spots.length);
-    while (this.ambient.has(id) && this.area === "store") {
+    while (this.ambient.has(id) && this.area === place) {
       if (this.ambientBusy.has(id)) {
         await wait(0.5);
         continue;
       }
       n = (n + 1 + Math.floor(Math.random() * 3)) % spots.length;
       // Keep clear of the player and of anyone taking part in a scene.
-      const busy = [this.player, ...Object.entries(this.cast).filter(([k, c]) => !this.ambient.has(k as NpcId) && c.root.parent === this.store.scene).map(([, c]) => c)];
+      const busy = [this.player, ...Object.entries(this.cast).filter(([k, c]) => !this.ambient.has(k as NpcId) && c.root.parent === room.scene).map(([, c]) => c)];
       const near = (x: number, z: number) => busy.some((c) => Math.hypot(c.position.x - x, c.position.z - z) < 2.0);
       for (let tries = 0; tries < spots.length && near(spots[n][0], spots[n][1]); tries++) n = (n + 1) % spots.length;
       if (near(spots[n][0], spots[n][1])) {
@@ -935,14 +1181,17 @@ export class Game {
       const ok = await c.go(x + (Math.random() - 0.5) * 0.4, z + (Math.random() - 0.5) * 0.3);
       if (!ok || !this.ambient.has(id)) return;
       if (slot) {
-        const s = this.store.slots[slot];
-        c.faceTo(s.anchors[0].p.x, s.anchors[0].p.z);
-        c.emote(this.slotDone(slot) ? "point" : "think", 1.4);
-      } else if (z < 1) {
+        const f = room.slots[slot] ? room.slots[slot].anchors[0].p : room.spots[slot].face;
+        c.faceTo(f.x, f.z);
+        c.emote(!room.slots[slot] || this.slotDone(slot) ? "point" : "think", 1.4);
+      } else if (place === "store" && z < 1) {
         c.faceTo(PENNY_SPOT.x, PENNY_SPOT.z);
         c.emote("give", 1.0);
         audio.coin();
         this.cast.penny.emote("nod", 0.8);
+      } else if (place === "school") {
+        c.faceTo(room.hostSpot.x, room.hostSpot.z);
+        c.emote(Math.random() < 0.5 ? "wave" : "laugh", 1.0);
       }
       await wait(1.6 + Math.random() * 2.2);
     }
@@ -959,28 +1208,35 @@ export class Game {
     const spot = new THREE.Vector3(at.x, 0, at.z);
     const yaw = Math.atan2(this.engine.goalPos.x - spot.x, this.engine.goalPos.z - spot.z);
     const box = { x: window.innerWidth / 2 - 120, y: window.innerHeight / 2 - 120, w: 240, h: 240 };
-    await bringToLife(this.engine, this.store.scene, this.effects, m, box, spot, new THREE.Euler(0, yaw, 0));
-    const roam = { minX: spot.x - 1.6, maxX: spot.x + 1.6, minZ: Math.max(0.6, spot.z - 0.8), maxZ: Math.min(ROOM.maxZ - 0.3, spot.z + 1.0) };
+    await bringToLife(this.engine, this.room.scene, this.effects, m, box, spot, new THREE.Euler(0, yaw, 0));
+    const roam = { minX: spot.x - 1.6, maxX: spot.x + 1.6, minZ: Math.max(0.6, spot.z - 0.8), maxZ: Math.min(this.room.bounds.maxZ - 0.3, spot.z + 1.0) };
     void playLiving(m, b, { effects: this.effects, roam, camera: this.engine.camPos, seconds });
     return { label, behaviour: b, w: m.w, h: m.h };
   }
 
-  /** Debug: every slot restored with natural colours, all customers shopping. */
+  /** Debug: every slot of the current room restored with natural colours, people about. */
   async debugFill() {
-    for (const id of SLOT_KEYS) {
-      const ex = exampleFor(this.store.slots[id].word);
+    const saves = this.slotSaves() as Record<string, SlotSave>;
+    for (const id of this.slotKeys()) {
+      const slot = this.room.slots[id];
+      const ex = exampleFor(slot.word);
       const arts = ex ? [artFromDrawing(ex)] : [];
-      this.save.store.slots[id] = { tints: this.store.slots[id].anchors.map(() => null), arts, src: this.store.slots[id].anchors.map(() => 0) };
+      saves[id] = { tints: slot.anchors.map(() => null), arts, src: slot.anchors.map(() => 0) };
+    }
+    if (this.place === "school") {
+      for (const [key, ch] of Object.entries(GLYPH_CHARS)) {
+        const ex = glyphExample(ch);
+        if (ex) (this.save.school.glyphs as Record<string, Art>)[key] = artFromDrawing(ex);
+      }
+      if (!this.save.school.steps.includes("bell")) this.save.school.steps.push("bell");
     }
     this.rebuildSlots();
-    this.setStoreLevel(this.storeLevel(), true);
-    this.updateStoreHud();
+    this.setRoomLevel(this.roomLevel(), true);
+    this.updateRoomHud();
     this.hud.showPen(true);
     for (const id of ["ken", "yui", "taro"] as NpcId[]) {
       const c = this.cast[id];
-      this.store.scene.add(c.root);
-      c.collide = (px, pz, r) => this.store.nav.collides(px, pz, r);
-      c.router = (ax, az, bx, bz) => this.store.nav.route(ax, az, bx, bz);
+      this.inRoom(c);
       c.place(-1 + Math.random() * 3, 1.5 + Math.random(), Math.PI);
       this.startAmbient(id);
     }

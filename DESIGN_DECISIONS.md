@@ -165,3 +165,48 @@ Ported from monster-island (`speech/recognition.ts`, `tts.ts`, matcher rules):
   like covers. Fish wiggle, bird flap, ball roll and the rest remain whole-drawing motion + shader
   deformation. No body-part detection.
 - Icon: 🎨 rather than 🪣 (U+1FAA3 renders as an empty box on some systems).
+
+## 2026-11-23 — Level 2, the Classroom (built directly by Claude at the user's request)
+
+- **What:** Ms. Mori's classroom. (1) "Good morning!" (2) Draw a desk and a chair; the magic fills four
+  places. (3) Write 12, 3, 6 and 9 on the blank clock; the child's handwriting stays on the clock, the magic
+  adds the other numbers and the hands. (4) "What time is it?" → "It's eight o'clock." (5) Ms. Mori says the
+  ABC and stops at four blank cards; the child writes d, g, m, t. (6) Ken, Yui and Taro arrive ("Good
+  morning!"; Taro wears the schoolbag the child drew in the shop), the clock reaches 8:30 ("It's eight
+  thirty."), the school chime rings. The School opens once the shop is finished (the pen comes from Level 1).
+- **Why:** *Let's Try! 2* Unit 4 (What time is it?) and Unit 6 (lowercase alphabet) with greetings, in a
+  place every child knows. Writing is the level's new mechanic, the way drawing objects was Level 1's.
+- **Time answers are truthful** (like yes/no in Level 1): the child reads the clock; a wrong time gets a hint
+  about the short or long hand and a second chance; after two misses only the right sentence is offered.
+- **Deferred:** the timetable from SPEC §5 (school subjects are *Let's Try! 2* Unit 7 territory and would make
+  the level long); free placement of desks (still the Supermarket's mechanic).
+- **Rejected:** writing all twelve clock numbers (tedious; four teach the clock layout); letters chosen at
+  random (d/g/m/t are distinctive in print and cover ascender, descender and x-height shapes).
+
+## 2026-11-23 — A second small CNN for written characters
+
+- **What:** `public/models/glyph-model.bin`, same architecture/format/runtime as the sketch model, 63 labels
+  (0-9, a-z, A-Z, scribble). Trained on UJI Pen Characters v2 (real pen strokes, writer-independent split)
+  plus EMNIST ByClass thinned to one-pixel skeletons and traced into strokes, all rasterised by the game's
+  own pipeline (`tools/sketch-model/build-glyphs.ts`). Policy in `src/recognition/glyphs.ts`: constrained to
+  the asked character; the other case and look-alikes count (D for d, l/I for 1, g/q for 9); a confident other
+  character is named ("That looks like b!"); the third attempt is accepted with the pen's help.
+- **Why:** Quick, Draw! has no letters or digits, and the object model must never be asked to read them
+  (SPEC §1). Same runtime means no new dependency and the same Chromebook cost (~0.4 MB, tens of ms).
+- **Rejected:** template matching ($P recogniser) — no training, but weaker on children's variation and no
+  calibrated "other letter" signal; EMNIST images used directly — scanned thick strokes do not look like a
+  touchpad line, so they are thinned and redrawn with the game's pen instead.
+- **Hint characters are hand-made** in the print style of Japanese elementary worksheets (single-storey g,
+  t with a crossbar), not picked from adult handwriting; the panel shows worksheet lines while writing.
+- **"12"** is written as two digits side by side on one page; strokes are grouped by horizontal overlap and
+  each digit is judged on its own.
+
+## 2026-11-23 — One controller for every room
+
+- **What:** `world/areas/room.ts` (`RoomArea`: scene, nav, slots, writing spots, door, host spot, views) is
+  implemented by the shop and the classroom; `Game` keeps `room`/`place` and all helpers (drawFor, restore,
+  npcEnter, surprises, ambient life) work in whichever room is active. The save gains a `school` section
+  (steps, slots, glyph art); old saves load unchanged.
+- **Why:** levels 3-5 reuse the same helpers; a second copy of the controller per level would drift.
+- **Rendering budget:** the clock face and the 26-card alphabet strip are each one canvas texture with the
+  child's handwriting painted in (not 26+12 meshes).

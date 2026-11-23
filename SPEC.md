@@ -139,9 +139,10 @@ src/ui/           hud, dialogue, ask prompt, draw panel, settings (teacher), sty
 
 ## 5. Levels 2–5 (designed, not built)
 
-- **Classroom:** chairs/desks into marked places; "What time is it?" — write digits on a blank clock
-  (digit recogniser); missing lowercase letters on the alphabet strip (letter recogniser, constrained
-  to the expected letter); timetable from NPC answers. Bell rings, students sit.
+- **Classroom — BUILT (2026-11-23), see §6.** Original design: chairs/desks into marked places; "What
+  time is it?" — write digits on a blank clock (digit recogniser); missing lowercase letters on the
+  alphabet strip (letter recogniser, constrained to the expected letter); timetable from NPC answers
+  (deferred). Bell rings, students sit.
 - **Zoo:** animals with species behaviours (monkeys climb and eat the bananas you draw, elephants
   trumpet and spray, giraffes browse, penguins slide and dive, fish swim, ducks paddle, pandas sit and
   eat bamboo — bamboo by stencil/rule). "Do you like elephants?", "What animal do you like?".
@@ -149,3 +150,26 @@ src/ui/           hud, dialogue, ask prompt, draw panel, settings (teacher), sty
   orange/tomato, egg by shape rule, milk by stencil; customers shop and check out.
 - **Gym:** physics objects (balls bounce, roll, are kicked), rackets used by NPCs; hoop and net by
   guided construction; the sports festival starts.
+
+## 6. Level 2 — Classroom (built)
+
+Ms. Mori's classroom, erased: faint outlines of four desks and chairs, a clock with ticks but no numbers
+or hands, four blank cards in the alphabet strip. Opens once the Stationery Store is finished.
+
+1. **Good morning.** Ms. Mori: "Oh! Good morning!" → the player says **"Good morning!"** The children
+   come at eight thirty.
+2. **Desks and chairs.** Draw a desk (the model's "table"), then a chair; each drawing fills the four
+   places (bounce / hop entrances).
+3. **The clock.** Write **12, 3, 6, 9** (click each dashed circle; "12" is two digits side by side).
+   The child's handwriting is painted onto the clock; the magic adds the other numbers and the hands
+   spin to 8:00.
+4. **What time is it?** → **"It's eight o'clock."** (truthful choice; "seven o'clock" gets a hint).
+5. **The ABC.** Ms. Mori says the letters and stops at each blank: "a, b, c… Oh! d is missing!" The
+   child writes **d, g, m, t**; then everyone says the whole ABC.
+6. **The children come.** Ken ("Good morning!" → the player answers), Yui, Taro with the schoolbag the
+   child drew in Level 1. The clock moves to 8:30; Ken: "What time is it?" → **"It's eight thirty."**
+   The school chime rings, Ms. Mori: "Good morning, everyone!" Album of the child's desk, chair,
+   numbers and letters.
+
+Writing uses the glyph model (`src/recognition/glyphs.ts`, training in `tools/sketch-model/README.md`)
+with the same help ladder as drawing (example → trace stencil → the pen helps on the third try).

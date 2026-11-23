@@ -4,41 +4,19 @@
  * fades to grey while erased and regains colour as slots are restored.
  */
 import * as THREE from "three";
-import type { Made } from "../../objects/made.ts";
 import { WORD_KINDS } from "../../objects/registry.ts";
 import type { WordId } from "../../recognition/vocab.ts";
 import { ghostMaterial, lampMat, worldBasicMaterial, worldMat } from "../materials.ts";
 import { NavMap, type Rect } from "../nav.ts";
 import { Parts, mix, shade } from "../parts.ts";
 import { signTexture } from "../signs.ts";
+import type { Anchor, RoomArea, Slot as BaseSlot, View } from "./room.ts";
 
 export type SlotId = "pencilCup" | "erasers" | "scissors" | "rulers" | "crayons" | "books" | "notebooks" | "schoolbags";
 
-export interface Anchor {
-  p: THREE.Vector3;
-  r: THREE.Euler;
-  /** Display scale (small things are shown a little bigger so they read from the camera). */
-  s?: number;
-}
-
-export interface View {
-  pos: THREE.Vector3;
-  look: THREE.Vector3;
-}
-
-export interface Slot {
-  id: SlotId;
-  word: WordId;
-  anchors: Anchor[];
-  ghosts: THREE.Object3D[];
-  items: Made[];
-  hotspot: THREE.Mesh;
-  /** Where the objective star floats. */
-  marker: THREE.Vector3;
-  /** Where the player stands to draw for it. */
-  stand: { x: number; z: number };
-  view: View;
-}
+export type { Anchor, View };
+/** A shop display slot. */
+export type Slot = BaseSlot & { id: SlotId };
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const e = (x = 0, y = 0, z = 0) => new THREE.Euler(x, y, z);
@@ -55,19 +33,32 @@ const OBSTACLES: Rect[] = [
   { minX: -4.45, maxX: -3.55, minZ: 1.9, maxZ: 2.95 } // plant corner
 ];
 
-export const VIEWS: Record<string, View> = {
+export const VIEWS: RoomArea["views"] = {
   overview: { pos: v(0.25, 6.7, 9.7), look: v(0.15, 1.3, -0.95) },
   counter: { pos: v(-1.3, 2.75, 3.05), look: v(-3.25, 1.15, -1.1) },
   door: { pos: v(1.6, 2.6, 4.6), look: v(3.6, 1.0, 1.4) },
   center: { pos: v(0.6, 3.2, 4.4), look: v(0.2, 0.9, -0.6) }
 };
 
-export class StoreArea {
+export class StoreArea implements RoomArea {
   readonly scene = new THREE.Scene();
+  readonly bounds = ROOM;
+  readonly door = DOOR;
+  readonly views = VIEWS;
+  readonly hostSpot = { x: PENNY_SPOT.x, z: PENNY_SPOT.z, facing: 0 };
+  readonly ambientSpots: [number, number, string | null][] = [
+    [0.1, -1.8, "books"],
+    [3.1, -1.8, "schoolbags"],
+    [0.9, 1.45, "crayons"],
+    [2.5, 1.45, "notebooks"],
+    [-2.0, 0.45, null],
+    [1.8, 2.3, null]
+  ];
   readonly nav: NavMap;
   readonly slots: Record<SlotId, Slot>;
+  readonly spots = {};
   readonly floor: THREE.Mesh;
-  readonly door: THREE.Group;
+  readonly doorLeaf: THREE.Group;
   private sign: THREE.Mesh;
   private plantBloom: THREE.Group;
   private windowGlass: THREE.Mesh;
@@ -89,7 +80,7 @@ export class StoreArea {
     this.buildBookRack();
     this.buildBagWall();
     this.buildTable();
-    this.door = this.buildDoor();
+    this.doorLeaf = this.buildDoor();
     const { sign, bloom, glass, glassMat } = this.buildDecor();
     this.sign = sign;
     this.plantBloom = bloom;
@@ -394,7 +385,7 @@ export class StoreArea {
 
   /** Open or close the shop door (0 = shut, 1 = open). */
   setDoor(open: number) {
-    this.door.rotation.y = -open * 1.25;
+    this.doorLeaf.rotation.y = -open * 1.25;
   }
 }
 
