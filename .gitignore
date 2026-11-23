@@ -1,0 +1,10 @@
+node_modules
+dist
+.tmp
+test-results
+playwright-report
+*.tsbuildinfo
+debug.log
+tools/sketch-model/.venv
+tools/sketch-model/data
+.tmp-dev.log

@@ -1,0 +1,158 @@
+# Quick, Draw! categories the Magic Stationery sketch model is trained on.
+# One per line, exactly as in the dataset's categories.txt (verified 2026-11-23).
+# Grouped by purpose; the game maps its own words onto these in src/recognition/vocab.ts.
+# Excluded on purpose: weapons, alcohol, skulls, syringes, underwear (classroom use).
+
+# Level 1 - Stationery Store
+pencil
+marker
+eraser
+scissors
+book
+crayon
+backpack
+paper clip
+paintbrush
+
+# Level 2 - Classroom
+table
+chair
+clock
+alarm clock
+computer
+laptop
+calendar
+
+# Level 3 - Zoo (+ animals children often draw instead)
+lion
+elephant
+giraffe
+zebra
+monkey
+penguin
+panda
+duck
+fish
+tiger
+bear
+kangaroo
+camel
+crocodile
+flamingo
+owl
+parrot
+snake
+frog
+rabbit
+swan
+rhinoceros
+octopus
+whale
+dolphin
+shark
+sea turtle
+crab
+snail
+butterfly
+bee
+spider
+bird
+horse
+cow
+pig
+sheep
+cat
+dog
+mouse
+
+# Nature
+tree
+palm tree
+grass
+bush
+leaf
+flower
+cactus
+mountain
+
+# Level 4 - Supermarket (+ other food)
+apple
+banana
+grapes
+strawberry
+carrot
+broccoli
+potato
+bread
+pear
+pineapple
+watermelon
+onion
+mushroom
+peas
+blueberry
+cookie
+cake
+donut
+ice cream
+pizza
+hamburger
+hot dog
+sandwich
+lollipop
+cup
+mug
+basket
+
+# Level 5 - Gym
+basketball
+soccer ball
+baseball
+baseball bat
+tennis racquet
+hockey stick
+golf club
+dumbbell
+helmet
+skateboard
+
+# Things children draw for fun (surprise reactions)
+sun
+moon
+star
+cloud
+rainbow
+lightning
+snowflake
+snowman
+car
+bus
+train
+airplane
+helicopter
+sailboat
+bicycle
+house
+smiley face
+umbrella
+hat
+crown
+t-shirt
+shoe
+key
+light bulb
+candle
+guitar
+cell phone
+eyeglasses
+teddy-bear
+dragon
+mermaid
+
+# Scribbles and plain shapes: catch "not a real object yet" drawings
+circle
+square
+triangle
+line
+squiggle
+zigzag
