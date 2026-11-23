@@ -2,7 +2,7 @@
 import type { Look } from "../world/characters.ts";
 import type { Voice } from "../speech/tts.ts";
 
-export type CastId = "penny" | "mori" | "oka" | "green" | "ken" | "yui" | "taro" | "player" | "pen";
+export type CastId = "penny" | "mori" | "oka" | "green" | "kato" | "ken" | "yui" | "taro" | "player" | "pen";
 
 export interface CastMember {
   id: CastId;
@@ -35,6 +35,12 @@ export const CAST: Record<Exclude<CastId, "pen">, CastMember> = {
     name: "Mr. Green",
     voice: { pitch: 0.86, rate: 0.9 },
     look: { skin: "#f0c8a4", hair: "#9e9e9e", hairStyle: "short", shirt: "#fafafa", legs: "#37474f", shoes: "#3e2723", extras: ["apron", "glasses"], extraColor: "#43a047", scale: 1.42 }
+  },
+  kato: {
+    id: "kato",
+    name: "Coach Kato",
+    voice: { pitch: 1.08, rate: 0.92 },
+    look: { skin: "#f1c9a5", hair: "#3b2a20", hairStyle: "bob", shirt: "#e53935", legs: "#1a237e", shoes: "#fafafa", extras: ["cap"], extraColor: "#1a237e", scale: 1.36 }
   },
   ken: {
     id: "ken",

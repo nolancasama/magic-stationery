@@ -6,6 +6,7 @@
 import type { PlaceId } from "../../world/areas/town.ts";
 import type { Game } from "../game.ts";
 import { placeProgress, schoolProgress, storeProgress, type SaveData } from "../save.ts";
+import { runGym } from "./gym.ts";
 import { runMarket } from "./market.ts";
 import { runSchool } from "./school.ts";
 import { runZoo } from "./zoo.ts";
@@ -40,7 +41,12 @@ export const LEVELS: Record<PlaceId, LevelDef> = {
     run: runMarket,
     open: (s) => placeProgress(s, "zoo") >= 1
   },
-  gym: { place: "gym", focus: "What sport do you like? Sports equipment, physics." }
+  gym: {
+    place: "gym",
+    focus: "Let's play soccer! Yes, let's! Do you like soccer? What sport do you like? I like ___. Sports equipment, physics.",
+    run: runGym,
+    open: (s) => placeProgress(s, "market") >= 1
+  }
 };
 
 export function isBuilt(id: PlaceId): boolean {

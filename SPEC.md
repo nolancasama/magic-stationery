@@ -150,8 +150,8 @@ src/ui/           hud, dialogue, ask prompt, draw panel, settings (teacher), sty
 - **Supermarket — BUILT (2026-11-24), see §8.** Original design: quantities ("three apples"), placement
   into baskets, colour disambiguation for orange/tomato, egg by shape rule, milk by stencil; customers shop
   and check out.
-- **Gym:** physics objects (balls bounce, roll, are kicked), rackets used by NPCs; hoop and net by
-  guided construction; the sports festival starts.
+- **Gym — BUILT (2026-11-24), see §9.** Original design: physics objects (balls bounce, roll, are kicked),
+  rackets used by NPCs; hoop and net by guided construction; the sports festival starts.
 
 ## 6. Level 2 — Classroom (built)
 
@@ -224,3 +224,34 @@ shelves never run out (the magic restocks them).
 
 Speech: the child's answers are judged by the item or number word ("Apples, please." is a correct answer
 too); the questions need both key words (what + want, how + many).
+
+## 9. Level 5 — Gym (built)
+
+Coach Kato's school gym on the day of the sports festival, erased: an empty ball cart, an empty ball rack,
+bare backboards without hoops, an empty racket wall and bat bucket. Opens once the supermarket is finished;
+the last place — restoring it restores the whole town. *Let's Try! 1* Unit 5 / *Let's Try! 2* Unit 2 —
+**"Let's play soccer!" "Yes, let's!" "Do you like soccer?" "What sport do you like?" "I like ___."** —
+with the sports vocabulary (soccer, basketball, tennis, baseball).
+
+**New mechanic: the child's equipment is used.** Balls are thrown and kicked with real arcs, bounces and
+rolls (the drawing spins as it rolls); people hold the drawn rackets and bats and play with them.
+
+1. **Hello.** "Hello! Welcome to the gym! Today is the sports festival… but everything is erased!" →
+   **"Hello!"**
+2. **Soccer.** Draw a **soccer ball** (Quick, Draw!; any round drawing counts) → the cart fills, the balls
+   bounce in. Ken: **"Let's play soccer!"** → **"Yes, let's!"** Ken kicks a ball into the goal ("Goal!").
+   Ken: **"Do you like soccer?"** → "Yes, I do." / "No, I don't." — both right.
+3. **Basketball.** Draw a **basketball** (the rack fills), then the **hoop** — guided construction: the
+   ring and net are traced from a stencil shown from the start (a ring with a net reads as a basket to the
+   model). Yui shoots: swish! Yui: **"What sport do you like?"** → **"I like ___."** (soccer / basketball /
+   tennis / baseball).
+4. **Tennis.** Draw a **racket** (Quick, Draw! "tennis racquet"; a lollipop shape counts). Taro: **"Let's
+   play tennis!"** → **"Yes, let's!"** Taro and Coach Kato rally with the child's rackets.
+5. **Baseball.** Draw a **bat** (Quick, Draw!, or any long thin drawing). The player asks Coach Kato
+   **"What sport do you like?"** — "I like baseball!" She pitches, Ken bats: a home run out of the window.
+6. **The sports festival.** Everyone from the town comes in (Ms. Penny, Ms. Mori, Mr. Oka, Mr. Green);
+   the player opens the festival: **"Let's play!"** Confetti, music, the whole town is restored; album of the
+   child's equipment.
+
+Speech: answers are judged by the sport word alone ("Soccer." is a correct answer); "What sport do you like?"
+needs sport + like; "Yes, let's!" needs yes.

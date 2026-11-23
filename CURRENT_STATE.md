@@ -2,19 +2,19 @@
 
 ## Status
 Built directly by Claude at the user's request (no router; the user has chosen "Claude directly" for every
-stage). Plan reviews and specs: `SPEC.md` §1 (Level 1), §6 (Level 2), §7 (Level 3), §8 (Level 4); decisions with
-reasons in `DESIGN_DECISIONS.md` (latest: 2026-11-24 Level 4, the Supermarket).
+stage). Plan reviews and specs: `SPEC.md` §1 (Level 1), §6 (Level 2), §7 (Level 3), §8 (Level 4), §9 (Level 5);
+decisions with reasons in `DESIGN_DECISIONS.md` (latest: 2026-11-24 Level 5, the Gym). All five places are built.
 
 **Live (pushed, `main` ab0fcf4):** core systems, Level 1 (Stationery Store), Level 2 (Classroom), town hub.
 Public repo nolancasama/magic-stationery, GitHub Pages (Actions workflow: unit tests + build, then deploy).
 
 **Committed locally, NOT pushed (2026-11-24):** e187064 — the fix pass (user plan "Bug Fixes, Movement
 Improvements, Speech Recognition, and Unfinished Work"), Level 3 (the Zoo) and the verification fixes below;
-then Level 4 (the Supermarket). The user asked to push to live when finished; the push waits for the re-run in
-Next Steps 2 (or the user's go-ahead).
+6b7a829 Level 4 (the Supermarket); then Level 5 (the Gym). The user asked to push to live when finished; the
+push waits for the re-run in Next Steps 1 (or the user's go-ahead).
 
-**Now:** Level 5 (the Gym). The user (2026-11-24): "no tests for this session just make levels" — so Level 4
-has never been run; only tsc/build and screenshots of its room.
+The user (2026-11-24): "no tests for this session just make levels" — so Levels 4 and 5 have never been run;
+only tsc/build, content checks of their hint drawings, and screenshots of their rooms.
 
 **Models:**
 - Sketch model (`public/models/sketch-model.bin`, 138 Quick, Draw! classes): int8 top-1 79.9%, top-3 93.2%.
@@ -29,14 +29,18 @@ has never been run; only tsc/build and screenshots of its room.
   `src/ui/drawPanel.ts` (writing mode, pen widths; input only while a script awaits `next()`).
 - `src/world/characters.ts` — gaze, grips, `sit`; key steering glides round corners (`roundCorner`), route
   walks end rather than walk on the spot (`ROUTE_SLIDE_MIN`).
-- `src/world/areas/` — `room.ts` (`RoomArea`), `store.ts`, `classroom.ts`, `zoo.ts`, `market.ts`, `town.ts`.
+- `src/world/areas/` — `room.ts` (`RoomArea`), `store.ts`, `classroom.ts`, `zoo.ts`, `market.ts`, `gym.ts`,
+  `town.ts`.
 - `src/game/` — `game.ts` (one controller for every room; `inLevelRoom` drives per-frame updates and gaze;
   `ROOM_PLACES`, `unitsOf`, `lockedWhy`; `pickSlot`/`cancelPick` for counting), `levels/store.ts`, `school.ts`,
-  `zoo.ts`, `market.ts`, `levels/index.ts` (unlock order shop → classroom → zoo → supermarket), `save.ts`
-  (`ms.save.v1`: `store`, `school`, `zoo`, `market`), `cast.ts` (+ Mr. Green).
+  `zoo.ts`, `market.ts`, `gym.ts`, `levels/index.ts` (unlock order shop → classroom → zoo → supermarket → gym),
+  `save.ts` (`ms.save.v1`: `store`, `school`, `zoo`, `market`, `gym`), `cast.ts` (+ Mr. Green, Coach Kato).
 - Level 4 pieces: `objects/market.ts` (apple, orange, tomato, carrot, egg, milk, basket), vocab words + `round`
   / `oval` shape rules, hand-made hints in `examples.ts`, phrases (what do you want / how many / here you are /
   I want … / one … five, please), `Character.carry()` (basket in the left hand).
+- Level 5 pieces: `objects/gym.ts` (soccer ball, basketball, hoop, racket, bat, play balls, goal), vocab words,
+  hand-made hints (hoop traced: criss-cross net), phrases (yes, let's / what sport / I like soccer … / let's
+  play), ball flights in `levels/gym.ts` (`flight`, `bounceOut`, `makeBall`).
 - Scripts: `cast-shots.mjs`, `view-shots.mjs`, `montage.mjs`, `school-shots.mjs`, `pass-shots.mjs` (town with
   the zoo open, students seated, classroom door, Class 4-1 sign).
 - Tests: 112 unit; e2e `fixes.spec.ts` (6 speech-prompt tests with a scripted fake recogniser, WASD/corner,
@@ -53,9 +57,10 @@ has never been run; only tsc/build and screenshots of its room.
   on table corners; the e2e "hang" was the test's fake recogniser bypassed (Chromium 153 has an unprefixed
   `SpeechRecognition`).
 - Screenshots not yet taken this pass: Class 4-1 sign, classroom door, students sitting, town with the zoo open.
-- **Level 4:** tsc clean, build OK, hand-made hints accepted by the model (content check); room screenshots
-  judged (erased, restored, stands, fridge, checkout: `.tmp/shots/market`). The level script, the counting
-  mechanic and the basket have never executed. No e2e test exists for it yet.
+- **Levels 4 and 5:** tsc clean, build OK, hand-made hints accepted by the model (content check); room
+  screenshots judged (`.tmp/shots/market`, `.tmp/shots/gym`, `.tmp/shots/gym2`). Their level scripts, the
+  counting mechanic, baskets, ball flights, held rackets/bats and the festival finale have never executed. No
+  e2e test exists for either yet.
 
 ## Known Issues
 - Another session's e2e (esl-social-life) running at the same time starves SwiftShader: tests time out
@@ -68,10 +73,12 @@ has never been run; only tsc/build and screenshots of its room.
 - Deferred: Level 2 timetable; zoo giraffes/fish/ducks.
 
 ## Next Steps
-1. Level 5, the Gym (SPEC §5): write SPEC §9, then build.
-2. When the user allows tests (on an idle machine): write `tests/e2e/market.spec.ts` (playthrough: `clickSlot`
-   the crate N times while the "Here you are." prompt is open, then `say`) and run it; rebuild and run gaze +
-   `store.spec.ts` + `school.spec.ts`, then the whole suite; `node scripts/pass-shots.mjs
-   http://127.0.0.1:4181/ .tmp/shots/pass` with `npm run preview -- --port 4181` running, and judge the shots.
-3. Push to live (the user asked for it when finished, after the re-run or on their go-ahead); confirm the
+1. When the user allows tests (on an idle machine): write `tests/e2e/market.spec.ts` (playthrough: `clickSlot`
+   the crate N times while the "Here you are." prompt is open, then `say`) and `gym.spec.ts` (draw five things,
+   answer, "Let's play!"), run them and watch one playthrough of each in screenshots (baskets, flights, held
+   rackets/bats, the festival); rebuild and run gaze + `store.spec.ts` + `school.spec.ts`, then the whole
+   suite; `node scripts/pass-shots.mjs http://127.0.0.1:4181/ .tmp/shots/pass` with
+   `npm run preview -- --port 4181` running, and judge the shots.
+2. Push to live (the user asked for it when finished, after the re-run or on their go-ahead); confirm the
    Pages deploy.
+3. Measure draw calls in the restored supermarket and gym (Chromebook budget ~100-140).

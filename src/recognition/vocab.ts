@@ -30,7 +30,12 @@ export type WordId =
   | "tomato"
   | "carrot"
   | "egg"
-  | "milk";
+  | "milk"
+  | "soccerBall"
+  | "basketball"
+  | "hoop"
+  | "racket"
+  | "bat";
 
 export interface Word {
   id: WordId;
@@ -77,7 +82,14 @@ export const WORDS: Record<WordId, Word> = {
   tomato: { id: "tomato", en: "tomato", plural: "tomatoes", article: "a", ja: "トマト", accepts: { circle: 0.7, apple: 0.6, blueberry: 0.5, onion: 0.4, strawberry: 0.3, cookie: 0.3 }, rule: "round" },
   egg: { id: "egg", en: "egg", plural: "eggs", article: "an", ja: "たまご", accepts: { circle: 0.7, potato: 0.5, pear: 0.3, cookie: 0.3, onion: 0.25 }, rule: "oval" },
   // A gable-top carton reads as a house; a glass or a bottle as a cup or a mug.
-  milk: { id: "milk", en: "milk", plural: "milk", article: "a", ja: "ぎゅうにゅう", accepts: { house: 0.6, cup: 0.6, mug: 0.5, square: 0.5, calendar: 0.3, book: 0.3, "cell phone": 0.3 } }
+  milk: { id: "milk", en: "milk", plural: "milk", article: "a", ja: "ぎゅうにゅう", accepts: { house: 0.6, cup: 0.6, mug: 0.5, square: 0.5, calendar: 0.3, book: 0.3, "cell phone": 0.3 } },
+  // Level 5, the Gym. Any round drawing is a ball; a long thin one is a bat.
+  soccerBall: { id: "soccerBall", en: "soccer ball", plural: "soccer balls", article: "a", ja: "サッカーボール", accepts: { "soccer ball": 1, basketball: 0.5, baseball: 0.5, circle: 0.5, "smiley face": 0.2 }, rule: "round" },
+  basketball: { id: "basketball", en: "basketball", plural: "basketballs", article: "a", ja: "バスケットボール", accepts: { basketball: 1, "soccer ball": 0.5, baseball: 0.5, circle: 0.5 }, rule: "round" },
+  // A ring with a net hanging below reads as a basket (or an ice cream cone).
+  hoop: { id: "hoop", en: "hoop", plural: "hoops", article: "a", ja: "ゴールの わ", accepts: { basket: 0.8, "ice cream": 0.5, circle: 0.5, cup: 0.4, basketball: 0.4, mug: 0.3 } },
+  racket: { id: "racket", en: "racket", plural: "rackets", article: "a", ja: "ラケット", accepts: { "tennis racquet": 1, lollipop: 0.6, "light bulb": 0.3, key: 0.25, paintbrush: 0.25 } },
+  bat: { id: "bat", en: "bat", plural: "bats", article: "a", ja: "バット", accepts: { "baseball bat": 1, "hockey stick": 0.5, "golf club": 0.4, line: 0.4, pencil: 0.3, crayon: 0.3, marker: 0.3 }, rule: "longThin" }
 };
 
 /** Model labels that mean "not a real thing yet": plain shapes and scribbles. */

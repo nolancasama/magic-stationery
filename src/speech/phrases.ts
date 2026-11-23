@@ -56,7 +56,14 @@ export type PhraseId =
   | "twoPlease"
   | "threePlease"
   | "fourPlease"
-  | "fivePlease";
+  | "fivePlease"
+  | "letsYes"
+  | "whatSport"
+  | "iLikeSoccer"
+  | "iLikeBasketball"
+  | "iLikeTennis"
+  | "iLikeBaseball"
+  | "letsPlay";
 
 const HAVE = ["have", "has", "had", "half", "haf", "hab", "habu", "hav", "haven", "halve", "heave", "hove", "happen", "happened", "having", "havea", "of", "ever"];
 const PEN = ["pen", "pens", "pen's", "penn", "pin", "pins", "pan", "pans", "ben", "pain", "pent", "penny", "happen", "happened", "apen", "upen", "pem", "pend", "pain", "spen"];
@@ -93,6 +100,13 @@ const TWO = ["two", "2", "to", "too", "tu", "toe", "tow", "tooth"];
 const THREE = ["three", "3", "tree", "free", "sree", "trees", "thee", "sri", "threw", "through"];
 const FOUR = ["four", "4", "for", "fore", "foe", "fo", "pour", "far", "floor"];
 const FIVE = ["five", "5", "fife", "fight", "fine", "hive", "vibe", "fives", "faiv"];
+// The Gym (Level 5). Sports answers are judged by the sport word alone ("Soccer." answers too).
+const SPORT = ["sport", "sports", "spot", "spots", "support", "sporto", "supports", "spore"];
+const SOCCER = ["soccer", "socker", "sakka", "sucker", "shocker", "sokka", "sacca", "soccer's"];
+const BASKETBALL = ["basketball", "basketballs", "basket", "baskets", "basket ball"];
+const TENNIS = ["tennis", "tenis", "tennies", "dennis", "tenniss", "tennis's", "venice"];
+const BASEBALL = ["baseball", "baseballs", "base", "based", "bass", "baseboard", "base ball"];
+const PLAY = ["play", "plays", "played", "pray", "pre", "plate", "blay", "player", "lets play", "let's play"];
 
 export const PHRASES: Record<PhraseId, Phrase> = {
   doYouHavePen: {
@@ -142,5 +156,13 @@ export const PHRASES: Record<PhraseId, Phrase> = {
   twoPlease: { id: "twoPlease", en: "Two, please.", ja: "ふたつ ください。", keys: [TWO] },
   threePlease: { id: "threePlease", en: "Three, please.", ja: "みっつ ください。", keys: [THREE] },
   fourPlease: { id: "fourPlease", en: "Four, please.", ja: "よっつ ください。", keys: [FOUR] },
-  fivePlease: { id: "fivePlease", en: "Five, please.", ja: "いつつ ください。", keys: [FIVE] }
+  fivePlease: { id: "fivePlease", en: "Five, please.", ja: "いつつ ください。", keys: [FIVE] },
+  // The Gym.
+  letsYes: { id: "letsYes", en: "Yes, let's!", ja: "うん、しよう！", keys: [YES], forbid: NO },
+  whatSport: { id: "whatSport", en: "What sport do you like?", ja: "どんな スポーツが すきですか？", keys: [SPORT, LIKE], distractors: ["whatAnimal", "whatDoYouWant"] },
+  iLikeSoccer: { id: "iLikeSoccer", en: "I like soccer.", ja: "サッカーが すきです。", keys: [SOCCER] },
+  iLikeBasketball: { id: "iLikeBasketball", en: "I like basketball.", ja: "バスケットボールが すきです。", keys: [BASKETBALL] },
+  iLikeTennis: { id: "iLikeTennis", en: "I like tennis.", ja: "テニスが すきです。", keys: [TENNIS] },
+  iLikeBaseball: { id: "iLikeBaseball", en: "I like baseball.", ja: "やきゅうが すきです。", keys: [BASEBALL] },
+  letsPlay: { id: "letsPlay", en: "Let's play!", ja: "あそぼう！", keys: [PLAY], distractors: ["thankYou", "hello"] }
 };

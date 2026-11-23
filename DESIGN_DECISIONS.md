@@ -329,3 +329,26 @@ user's "Claude directly" work).
   done signal); ceiling lamps over the stands (they hung between the camera and the crates).
 - **Not run yet (the user's instruction, this session):** no test or playthrough has executed this level;
   only the room was judged from screenshots (erased, restored, the stands, the fridge, the checkout).
+
+## 2026-11-24 — Level 5, the Gym, and the end of the game (built directly by Claude; no tests this session)
+
+- **What:** Coach Kato's school gym on sports-festival day (SPEC §9): a ball cart, a ball rack, two backboards
+  whose hoops are a display, a racket wall, a bat bucket, a soccer goal. Ken kicks the child's soccer ball into
+  the goal, Yui shoots through the traced hoop, Taro and Coach Kato rally with the child's rackets, Ken hits a
+  home run with the child's bat; then everyone from the town comes in and the player opens the festival with
+  **"Let's play!"** — the whole town is restored.
+- **Why:** *Let's Try! 1* Unit 5 / *Let's Try! 2* Unit 2 — "Let's play ___!" "Yes, let's!", "Do you like ___?",
+  "What sport do you like?" "I like ___." The level's mechanic is the child's equipment in use: real arcs,
+  bounces and rolls (small targeted flights in the level script rather than the free "bounce" behaviour, so
+  a kick reaches the goal and a shot drops through the ring).
+- **Hoop by guided construction:** the hoop is traced from a stencil shown from the start (help 2). A ring with
+  a criss-cross net reads as a "basket" (99%); the first hint, a square grid net, read as a "calendar" (91%) and
+  was replaced.
+- **Forgiving words:** soccer ball and basketball accept any round drawing (`round` rule), the bat any long
+  thin one (`longThin`), the racket also a lollipop shape. Sports answers are judged by the sport word alone.
+- **Finale:** the guests (Ms. Penny, Ms. Mori, Mr. Oka, Mr. Green) enter through one held-open door; balls
+  bounce up all over the gym; the town announcement thanks the player and invites them to revisit any place.
+- **Rejected:** a volleyball net and a stage (cluttered the diorama; the rally reads without a net); ceiling
+  equipment between the camera and the court.
+- **Not run yet:** like Level 4, no test or playthrough has executed this level; the room was judged from
+  screenshots (erased, restored, hoops, racket wall, goal, ball cart).

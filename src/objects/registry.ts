@@ -17,6 +17,7 @@ import { SURPRISES, type PlayContext } from "./surprises.ts";
 import { buildChair, buildDesk } from "./furniture.ts";
 import { buildBamboo, buildBanana, buildElephant, buildMonkey, buildPanda, buildPenguin } from "./zoo.ts";
 import { buildApple, buildCarrot, buildEgg, buildMilk, buildOrange, buildTomato } from "./market.ts";
+import { buildBasketball, buildBat, buildHoop, buildRacket, buildSoccerBall } from "./gym.ts";
 
 export interface IntroContext {
   effects: Effects;
@@ -235,8 +236,31 @@ export const WORD_KINDS: Record<WordId, WordKind> = {
       audio.sparkle(3, 1318);
       await squash(m, 0.06);
     }
-  }
+  },
+  // Level 5, the Gym.
+  soccerBall: { build: (tint) => buildSoccerBall(tint), tintable: true, intro: (m) => bounceIn(m) },
+  basketball: { build: (tint) => buildBasketball(tint), tintable: true, intro: (m) => bounceIn(m) },
+  hoop: {
+    build: (tint) => buildHoop(tint),
+    tintable: true,
+    async intro(m) {
+      // The net swishes as the ring appears.
+      await animate(0.6, (k) => m.inner.scale.set(1, Math.max(0.05, ease.out(k)), 1));
+      audio.whoosh(0.4);
+    }
+  },
+  racket: { build: (tint) => buildRacket(tint), tintable: true, intro: (m) => dropIn(m, 0.3, 0.5, Math.PI * 2) },
+  bat: { build: (tint) => buildBat(tint), tintable: true, intro: (m) => dropIn(m, 0.35, 0.55, Math.PI * 2) }
 };
+
+/** A ball bounces three times into place. */
+async function bounceIn(m: Made) {
+  for (const h of [0.5, 0.22, 0.08]) {
+    await animate(0.2 + h * 0.6, (k) => (m.inner.position.y = arc(k) * h));
+    audio.bounce(1.1 + h);
+  }
+  await squash(m, 0.12);
+}
 
 /** Round food rolls in from the side and settles. */
 async function rollIn(m: Made) {

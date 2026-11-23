@@ -36,7 +36,13 @@ export const MARKET_STEPS: MarketStep[] = ["greet", "apples", "oranges", "vegeta
 export type MarketSlotKey = "apples" | "oranges" | "tomatoes" | "carrots" | "milk" | "eggs";
 export const MARKET_SLOT_KEYS: MarketSlotKey[] = ["apples", "oranges", "tomatoes", "carrots", "milk", "eggs"];
 
-export type Step = StoreStep | SchoolStep | ZooStep | MarketStep;
+/** Level 5, the Gym. */
+export type GymStep = "coach" | "soccer" | "basketball" | "tennis" | "baseball" | "festival";
+export const GYM_STEPS: GymStep[] = ["coach", "soccer", "basketball", "tennis", "baseball", "festival"];
+export type GymSlotKey = "soccerBalls" | "basketballs" | "hoops" | "rackets" | "bats";
+export const GYM_SLOT_KEYS: GymSlotKey[] = ["soccerBalls", "basketballs", "hoops", "rackets", "bats"];
+
+export type Step = StoreStep | SchoolStep | ZooStep | MarketStep | GymStep;
 
 export interface SlotSave {
   /** Crayon colour (hex) of each filled anchor; null = natural colours. */
@@ -83,6 +89,10 @@ export interface SaveData {
     steps: MarketStep[];
     slots: Partial<Record<MarketSlotKey, SlotSave>>;
   };
+  gym: {
+    steps: GymStep[];
+    slots: Partial<Record<GymSlotKey, SlotSave>>;
+  };
   settings: Settings;
 }
 
@@ -96,6 +106,7 @@ export function defaults(): SaveData {
     school: { steps: [], slots: {}, glyphs: {} },
     zoo: { steps: [], slots: {} },
     market: { steps: [], slots: {} },
+    gym: { steps: [], slots: {} },
     settings: { mic: true, help: "normal", japanese: true, slowVoice: false, music: true, sfx: true, touchpadPen: false }
   };
 }
@@ -136,6 +147,11 @@ export function sanitize(raw: unknown): SaveData {
   if (market && typeof market === "object") {
     if (Array.isArray(market.steps)) out.market.steps = MARKET_STEPS.filter((s) => (market.steps as unknown[]).includes(s));
     sanitizeSlots(market.slots, MARKET_SLOT_KEYS, out.market.slots);
+  }
+  const gym = r.gym as Record<string, unknown> | undefined;
+  if (gym && typeof gym === "object") {
+    if (Array.isArray(gym.steps)) out.gym.steps = GYM_STEPS.filter((s) => (gym.steps as unknown[]).includes(s));
+    sanitizeSlots(gym.slots, GYM_SLOT_KEYS, out.gym.slots);
   }
   const st = r.settings as Record<string, unknown> | undefined;
   if (st && typeof st === "object") {
@@ -240,9 +256,15 @@ export function marketUnits(data: SaveData): { done: number; total: number } {
   return { done, total: MARKET_SLOT_KEYS.length + 1 };
 }
 
-export function placeProgress(data: SaveData, place: "store" | "school" | "zoo" | "market"): number {
+/** Gym restoration units: the five displays and the sports festival. */
+export function gymUnits(data: SaveData): { done: number; total: number } {
+  const done = GYM_SLOT_KEYS.filter((k) => data.gym.slots[k]).length + (data.gym.steps.includes("festival") ? 1 : 0);
+  return { done, total: GYM_SLOT_KEYS.length + 1 };
+}
+
+export function placeProgress(data: SaveData, place: "store" | "school" | "zoo" | "market" | "gym"): number {
   if (place === "store") return storeProgress(data);
   if (place === "school") return schoolProgress(data);
-  const u = place === "zoo" ? zooUnits(data) : marketUnits(data);
+  const u = place === "zoo" ? zooUnits(data) : place === "market" ? marketUnits(data) : gymUnits(data);
   return u.done / u.total;
 }
