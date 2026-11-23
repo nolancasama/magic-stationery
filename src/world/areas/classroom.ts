@@ -203,7 +203,8 @@ export class ClassroomArea implements RoomArea {
 
   private buildDoor(): THREE.Group {
     const frame = new Parts();
-    frame.box(0.24, 2.5, 0.1, "#8d6e63", { p: [4.6, 1.25, 0.95] });
+    // The jamb wraps 2 cm past the wall's end (z 1.0): no coplanar faces to z-fight.
+    frame.box(0.24, 2.5, 0.12, "#8d6e63", { p: [4.6, 1.25, 0.96] });
     frame.box(0.24, 2.5, 0.1, "#8d6e63", { p: [4.6, 1.25, 2.45] });
     frame.box(0.24, 0.12, 1.6, "#8d6e63", { p: [4.6, 2.52, 1.7] });
     this.solid(frame.mesh(worldMat));
@@ -253,20 +254,24 @@ export class ClassroomArea implements RoomArea {
     bellParts.cyl(0.11, 0.11, 0.02, "#90a4ae", { p: [0, 0, 0.05], r: [Math.PI / 2, 0, 0] }, 14);
     bellParts.cyl(0.05, 0.05, 0.025, "#607d8b", { p: [0, 0, 0.06], r: [Math.PI / 2, 0, 0] }, 10);
     const bell = bellParts.mesh(worldMat);
-    bell.position.set(4.48, 2.95, 1.7);
+    // On the wall beside the door, clear of the class sign above it.
+    bell.position.set(4.44, 2.95, 2.72);
     bell.rotation.y = -Math.PI / 2;
     this.scene.add(lamps.mesh(worldMat), bulbs.mesh(lampMat), bell);
     // A noticeboard with pictures.
     const nb = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.05), worldBasicMaterial({ map: noticeTexture(), transparent: true }));
     nb.position.set(-3.3, 1.95, -2.98);
     this.scene.add(nb);
-    const sign = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.4, 0.34),
-      worldBasicMaterial({ map: signTexture("Class 4-1", { bg: "#7cb342", fg: "#ffffff", w: 448, h: 108, border: "#ffffff" }), transparent: true })
-    );
-    sign.position.set(4.49, 2.6, 2.75);
+    // "Class 4-1", centred over the door opening (z 1.0-2.4), above the frame's lintel (top 2.58),
+    // on the room side and again on the corridor side.
+    const signMat = worldBasicMaterial({ map: signTexture("Class 4-1", { bg: "#7cb342", fg: "#ffffff", w: 448, h: 108, border: "#ffffff" }), transparent: true });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.29), signMat);
+    sign.position.set(4.495, 2.86, DOOR.z);
     sign.rotation.y = -Math.PI / 2;
-    this.scene.add(sign);
+    const outside = sign.clone();
+    outside.position.x = 4.705;
+    outside.rotation.y = Math.PI / 2;
+    this.scene.add(sign, outside);
     return { sign, glassMat, bell };
   }
 
@@ -558,7 +563,7 @@ export class ClassroomArea implements RoomArea {
     this.last = t;
     if (this.bellRing > 0) {
       this.bellRing -= dt;
-      this.bell.position.x = 4.48 + Math.sin(t * 60) * 0.006;
+      this.bell.position.x = 4.44 + Math.sin(t * 60) * 0.006;
       this.bell.scale.setScalar(1 + Math.abs(Math.sin(t * 9)) * 0.08);
     } else this.bell.scale.setScalar(1);
   }

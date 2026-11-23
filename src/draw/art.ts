@@ -20,6 +20,8 @@ export interface ArtStroke {
   c: string;
   /** Flat point list x0,y0,x1,y1,... */
   p: number[];
+  /** Pen width (art units), when it differs from the art's `lw`. */
+  w?: number;
 }
 
 export interface ArtFill {
@@ -51,7 +53,8 @@ export function artFromDrawing(d: Drawing, lineWidth = CANVAS_LINE): Art {
       if (y > maxY) maxY = y;
     }
   if (minX === Infinity) return { w: 1, h: 1, lw: lineWidth, strokes: [] };
-  const pad = lineWidth / 2 + 1;
+  const widest = Math.max(lineWidth, ...d.strokes.map((s) => s.width ?? lineWidth));
+  const pad = widest / 2 + 1;
   const ox = minX - pad;
   const oy = minY - pad;
   const strokes = d.strokes.map((s) => {
@@ -59,7 +62,9 @@ export function artFromDrawing(d: Drawing, lineWidth = CANVAS_LINE): Art {
     const pts = s.points.length > 2 ? rdp(s.points, 0.6) : s.points;
     const p: number[] = [];
     for (const [x, y] of pts) p.push(Math.round(x - ox), Math.round(y - oy));
-    return { c: s.color, p };
+    const st: ArtStroke = { c: s.color, p };
+    if (s.width !== undefined && s.width !== lineWidth) st.w = s.width;
+    return st;
   });
   const art: Art = { w: Math.ceil(maxX - minX + pad * 2), h: Math.ceil(maxY - minY + pad * 2), lw: lineWidth, strokes };
   const fills = (d.fills ?? []).map((f) => ({ x: Math.round(f.x - ox), y: Math.round(f.y - oy), c: f.color })).filter((f) => f.x > 0 && f.y > 0 && f.x < art.w && f.y < art.h);
@@ -72,7 +77,7 @@ export function artToDrawing(a: Art): Drawing {
     strokes: a.strokes.map((s) => {
       const points: Point[] = [];
       for (let i = 0; i + 1 < s.p.length; i += 2) points.push([s.p[i], s.p[i + 1]]);
-      return { color: s.c, points };
+      return s.w ? { color: s.c, points, width: s.w } : { color: s.c, points };
     })
   };
   if (a.fills?.length) d.fills = a.fills.map((f) => ({ x: f.x, y: f.y, color: f.c }));
@@ -155,8 +160,10 @@ export interface ArtRender {
   aspect: number;
 }
 
-function strokePaths(g: CanvasRenderingContext2D, a: Art, scale: number, off: number, colour: string | null) {
+/** Each stroke at its own width: `widen` x the rendered pen width (at least `min`). */
+function strokePaths(g: CanvasRenderingContext2D, a: Art, scale: number, off: number, colour: string | null, widen = 1, min = 1.5) {
   for (const s of a.strokes) {
+    g.lineWidth = Math.max(min, (s.w ?? a.lw) * scale * widen);
     g.strokeStyle = colour ?? s.c;
     g.fillStyle = colour ?? s.c;
     const pts = s.p;
@@ -189,16 +196,15 @@ export function renderArt(a: Art, maxPx = 256, opts: { glowOnly?: string; autoFi
   const g = canvas.getContext("2d") as CanvasRenderingContext2D;
   g.lineCap = "round";
   g.lineJoin = "round";
-  const lw = Math.max(1.5, a.lw * scale);
+  // The widest pen decides how far fills tuck under the lines.
+  const lw = Math.max(1.5, Math.max(a.lw, ...a.strokes.map((s) => s.w ?? a.lw)) * scale);
   if (opts.glowOnly) {
     g.shadowColor = opts.glowOnly;
     g.shadowBlur = glowPad * 0.9;
-    g.lineWidth = lw * 1.6;
-    strokePaths(g, a, scale, glowPad, opts.glowOnly);
+    strokePaths(g, a, scale, glowPad, opts.glowOnly, 1.6);
     return { canvas, aspect: W / H };
   }
   if (opts.autoFill !== false || a.fills?.length) paintFills(g, a, scale, W, H, lw, opts.autoFill !== false);
-  g.lineWidth = lw;
   strokePaths(g, a, scale, 0, null);
   return { canvas, aspect: W / H };
 }
@@ -212,8 +218,7 @@ function paintFills(g: CanvasRenderingContext2D, a: Art, scale: number, W: numbe
   m.lineCap = "round";
   m.lineJoin = "round";
   // Thicker than the real line so small gaps in an outline still close.
-  m.lineWidth = Math.max(3, lw * 1.8);
-  strokePaths(m, a, scale, 0, "#000");
+  strokePaths(m, a, scale, 0, "#000", 1.8, 3);
   const px = m.getImageData(0, 0, W, H).data;
   const line = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) line[i] = px[i * 4 + 3] > 40 ? 1 : 0;
@@ -266,7 +271,10 @@ export function sanitizeArt(raw: unknown): Art | null {
     const st = s as Record<string, unknown>;
     if (!st || !isHex(st.c) || !Array.isArray(st.p)) continue;
     const p = (st.p as unknown[]).slice(0, 4000).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-    if (p.length >= 2) strokes.push({ c: st.c, p: p.length % 2 ? p.slice(0, -1) : p });
+    if (p.length < 2) continue;
+    const out: ArtStroke = { c: st.c, p: p.length % 2 ? p.slice(0, -1) : p };
+    if (typeof st.w === "number" && Number.isFinite(st.w) && st.w > 0 && st.w <= 100) out.w = st.w;
+    strokes.push(out);
   }
   if (!strokes.length) return null;
   const art: Art = { w: r.w as number, h: r.h as number, lw: r.lw as number, strokes };

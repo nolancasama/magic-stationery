@@ -1,57 +1,68 @@
 # Current State
 
 ## Status
-Built directly by Claude at the user's request (no router) — Level 1 from the user's plan "Magic Stationery —
-Restore the World" (2026-11-23), Level 2 on 2026-11-23 ("Claude directly" again, chosen by the user). The plan
-review is `SPEC.md` §1; Level 2 is `SPEC.md` §6; decisions with reasons are in `DESIGN_DECISIONS.md`.
+Built directly by Claude at the user's request (no router; the user has chosen "Claude directly" for every
+stage). Plan reviews and specs: `SPEC.md` §1 (Level 1), §6 (Level 2), §7 (Level 3); decisions with reasons in
+`DESIGN_DECISIONS.md` (latest: 2026-11-24 verification pass).
 
-**Built:** core systems, Level 1 (the Stationery Store), Level 2 (Ms. Mori's Classroom, opens once the shop is
-finished), the town hub (zoo, market, gym "Coming soon"). Public repo nolancasama/magic-stationery with GitHub
-Pages (Actions workflow).
+**Live (pushed, `main` ab0fcf4):** core systems, Level 1 (Stationery Store), Level 2 (Classroom), town hub.
+Public repo nolancasama/magic-stationery, GitHub Pages (Actions workflow: unit tests + build, then deploy).
+
+**Committed locally, NOT pushed (2026-11-24):** the fix pass (user plan "Bug Fixes, Movement Improvements,
+Speech Recognition, and Unfinished Work"), Level 3 (the Zoo), and the verification fixes below. The user asked
+to push to live when finished; the push waits for the re-run in Next Steps 2.
+
+**Now:** Level 4 (Supermarket) — the user said "stop tests for now, proceed on next level" (2026-11-24).
 
 **Models:**
-- Sketch model (`public/models/sketch-model.bin`, 414 KB, 138 Quick, Draw! classes): int8 top-1 79.9%,
-  top-3 93.2%; first-try acceptance of genuine drawings 90-100% per Level 1 word.
-- Glyph model (`public/models/glyph-model.bin`, 393 KB, 0-9 / a-z / A-Z / scribble; UJI Pen Characters v2 +
-  EMNIST thinned to strokes): int8 top-1 80.9%, top-3 96.4% on unseen writers. With the policy, real
-  handwriting of the Level 2 characters is accepted first try 93-100%; other characters wrongly accepted
-  0.3-6.3% (mostly intended look-alikes). Training data lives outside the repo (see tools README).
+- Sketch model (`public/models/sketch-model.bin`, 138 Quick, Draw! classes): int8 top-1 79.9%, top-3 93.2%.
+- Glyph model (`public/models/glyph-model.bin`, 0-9 / a-z / A-Z / scribble): top-1 80.9%, top-3 96.4% on
+  unseen writers; Level 2 characters accepted first try 93-100%.
 
 ## What Exists
-- `src/recognition/` — `strokes.ts` + `raster.ts` (shared with training), `model.ts` (int8 CNN in plain TS),
-  `recognizer.ts` (used by both models), `vocab.ts`, `shapeRules.ts`, `policy.ts` (objects), `glyphs.ts`
-  (characters: constrained policy, look-alikes, "12" splitting, hand-made worksheet-style examples),
-  `examples.ts` (+ `examples.json`).
-- `tools/sketch-model/` — reproducible pipelines for both models (`build-dataset.ts`, `build-glyphs.ts`,
-  shared `augment.ts`, `train.py`, `eval-policy.ts`, `eval-glyphs.ts`, `pick-examples.ts`).
-- `src/world/areas/` — `room.ts` (the `RoomArea` interface), `store.ts`, `classroom.ts` (clock face and
-  alphabet strip are single canvas textures with the child's handwriting painted in), `town.ts`.
-- `src/objects/` — Level 1 models, `furniture.ts` (desk, chair), surprises, living drawings, registry.
-- `src/game/` — `game.ts` (one controller for every room: `room`/`place`, drawFor, writeGlyph, restore,
-  saveGlyph, npcEnter…), `levels/store.ts`, `levels/school.ts`, `levels/index.ts` (registry + unlock order),
-  `save.ts` (`ms.save.v1`, now with a `school` section; old saves load unchanged), `cast.ts` (+ Ms. Mori).
-- `src/ui/` — draw panel has a writing mode (worksheet lines, "Write the letter d!"); dialogue supports
-  `{shown|spoken}` so letter names are spoken correctly.
-- Tests: 71 unit tests; e2e `tests/e2e/store.spec.ts` (2) and `school.spec.ts` (full Level 2 with real
-  handwriting, a wrong letter and a wrong time). Screenshot pass: `scripts/school-shots.mjs`.
+- `src/recognition/` — preprocessing, int8 CNN, `Recognizer`, `vocab.ts`, `shapeRules.ts` (long-thin: ruler,
+  bamboo), `policy.ts`, `glyphs.ts`, `examples.ts` (+ `examples.json`).
+- `src/speech/` — `match.ts` (times by value, `couldGrow`), `recognition.ts` (continuous sessions), `phrases.ts`.
+- `src/ui/ask.ts` (speech prompt: settle after "eight…", continuation session, tip with listen button),
+  `src/ui/drawPanel.ts` (writing mode, pen widths; input only while a script awaits `next()`).
+- `src/world/characters.ts` — gaze, grips, `sit`; key steering glides round corners (`roundCorner`), route
+  walks end rather than walk on the spot (`ROUTE_SLIDE_MIN`).
+- `src/world/areas/` — `room.ts` (`RoomArea`), `store.ts`, `classroom.ts`, `zoo.ts`, `town.ts`.
+- `src/game/` — `game.ts` (one controller for every room; `inLevelRoom` drives per-frame updates and gaze),
+  `levels/store.ts`, `school.ts`, `zoo.ts`, `levels/index.ts` (unlock order shop → classroom → zoo),
+  `save.ts` (`ms.save.v1`: `store`, `school`, `zoo`), `cast.ts`.
+- Scripts: `cast-shots.mjs`, `view-shots.mjs`, `montage.mjs`, `school-shots.mjs`, `pass-shots.mjs` (town with
+  the zoo open, students seated, classroom door, Class 4-1 sign).
+- Tests: 112 unit; e2e `fixes.spec.ts` (6 speech-prompt tests with a scripted fake recogniser, WASD/corner,
+  pen widths, gaze), `store.spec.ts` (2), `school.spec.ts`, `zoo.spec.ts` (own 480 s timeout).
 
-## Current Work
-**Level 2 committed + pushed to `main` (2026-11-23, live via GitHub Pages at the user's request).** Verified
-before commit: tsc, 71 unit tests, all 3 e2e tests (Level 2 playthrough, Level 1 regression, mic-off), Claude
-judged the screenshots (erased/restored room, writing panel with stencil, clock with handwriting, arrival,
-album).
-
-Also fixed by the room refactor: the player character was missing inside the shop (stayed in the town scene).
-Level 1's e2e draw-call limit was raised 130 → 140 for it (+7 calls).
+## Verification (exact — 2026-11-24)
+- Final build: tsc clean, 112 unit tests pass; e2e WASD (incl. gliding round the table corner), pen widths and
+  the Level 3 playthrough pass.
+- Build before the movement change (same except `characters.ts` steering/route slide and `inLevelRoom`): all six
+  speech tests, gaze, Level 1 by speaking, Level 1 in tap mode and Level 2 passed.
+- **Not re-run on the final build:** gaze, Levels 1 and 2. Risk is low (the route change only ends a blocked
+  walk early; `inLevelRoom` is identical for shop/classroom) but unobserved.
+- Fixed this pass: the Zoo stood frozen (`Game.update` listed rooms by name, without the zoo); the player stuck
+  on table corners; the e2e "hang" was the test's fake recogniser bypassed (Chromium 153 has an unprefixed
+  `SpeechRecognition`).
+- Screenshots not yet taken this pass: Class 4-1 sign, classroom door, students sitting, town with the zoo open.
 
 ## Known Issues
-- Draw calls: restored shop ~132 (with the player now visible), restored classroom ~74. Merge static display
-  items if a Chromebook struggles.
-- Students stand at their places at the end of Level 2 (no sitting pose yet).
-- Thin lines read small from the overview camera (faithful line weight) — the drawn desks look spindly.
-- Writing and drawing on a real Chromebook touchpad not tried; speech only via the test hook, not a real mic.
-- Timetable (SPEC §5) deferred.
+- Another session's e2e (esl-social-life) running at the same time starves SwiftShader: tests time out
+  (one speech test did). Run e2e when the machine is otherwise idle. Full suite ~14 min; zoo test ~5 min.
+- The pen's speech bubble covers the canvas's top-left corner (hides line starts there; drawing still works).
+- Draw calls: restored shop ~132, restored classroom ~74; zoo not measured.
+- Thin lines read small from the overview camera; drawn desks look spindly.
+- Real Chromebook touchpad, microphone and Chrome continuous recognition untested (fake recogniser only).
+- Zoo: debug `?scene=zoo&fill=1` shows animals static (life loops start only in the level script).
+- Deferred: Level 2 timetable; zoo giraffes/fish/ducks.
 
 ## Next Steps
-1. The user plays Levels 1-2 on a Chromebook and reports feel (writing with a touchpad, speech, pacing).
-2. Level 3 (Zoo, SPEC.md §5): animals with species behaviours, "Do you like …?".
+1. Level 4, the Supermarket (SPEC §5): write SPEC §8, then build (area, host, objects, script, phrases,
+   vocab, save section, e2e test).
+2. When the user allows tests: on an idle machine, rebuild and run gaze + `store.spec.ts` + `school.spec.ts`
+   (then the whole suite); `node scripts/pass-shots.mjs http://127.0.0.1:4181/ .tmp/shots/pass` with
+   `npm run preview -- --port 4181` running, and judge the shots.
+3. Push to live (the user asked for it when finished); confirm the Pages deploy.
+4. Then the Gym (SPEC §5).

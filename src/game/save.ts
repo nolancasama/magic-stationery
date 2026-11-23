@@ -24,7 +24,13 @@ export const GLYPH_KEYS: GlyphKey[] = [...CLOCK_KEYS, ...LETTER_KEYS];
 /** What the child writes for each key. */
 export const GLYPH_CHARS: Record<GlyphKey, string> = { n12: "12", n3: "3", n6: "6", n9: "9", ld: "d", lg: "g", lm: "m", lt: "t" };
 
-export type Step = StoreStep | SchoolStep;
+/** Level 3, the Zoo. */
+export type ZooStep = "welcome" | "elephants" | "monkeys" | "pandas" | "penguins" | "favorite";
+export const ZOO_STEPS: ZooStep[] = ["welcome", "elephants", "monkeys", "pandas", "penguins", "favorite"];
+export type ZooSlotKey = "elephants" | "monkeys" | "bananas" | "pandas" | "bamboo" | "penguins";
+export const ZOO_SLOT_KEYS: ZooSlotKey[] = ["elephants", "monkeys", "bananas", "pandas", "bamboo", "penguins"];
+
+export type Step = StoreStep | SchoolStep | ZooStep;
 
 export interface SlotSave {
   /** Crayon colour (hex) of each filled anchor; null = natural colours. */
@@ -63,6 +69,10 @@ export interface SaveData {
     /** The child's own handwriting for each written character. */
     glyphs: Partial<Record<GlyphKey, Art>>;
   };
+  zoo: {
+    steps: ZooStep[];
+    slots: Partial<Record<ZooSlotKey, SlotSave>>;
+  };
   settings: Settings;
 }
 
@@ -74,6 +84,7 @@ export function defaults(): SaveData {
     started: false,
     store: { steps: [], slots: {} },
     school: { steps: [], slots: {}, glyphs: {} },
+    zoo: { steps: [], slots: {} },
     settings: { mic: true, help: "normal", japanese: true, slowVoice: false, music: true, sfx: true, touchpadPen: false }
   };
 }
@@ -104,6 +115,11 @@ export function sanitize(raw: unknown): SaveData {
         if (a) out.school.glyphs[key] = a;
       }
     }
+  }
+  const zoo = r.zoo as Record<string, unknown> | undefined;
+  if (zoo && typeof zoo === "object") {
+    if (Array.isArray(zoo.steps)) out.zoo.steps = ZOO_STEPS.filter((s) => (zoo.steps as unknown[]).includes(s));
+    sanitizeSlots(zoo.slots, ZOO_SLOT_KEYS, out.zoo.slots);
   }
   const st = r.settings as Record<string, unknown> | undefined;
   if (st && typeof st === "object") {
@@ -196,6 +212,15 @@ export function schoolProgress(data: SaveData): number {
   return u.done / u.total;
 }
 
-export function placeProgress(data: SaveData, place: "store" | "school"): number {
-  return place === "store" ? storeProgress(data) : schoolProgress(data);
+/** Zoo restoration units: the six displays and the favourite-animal talk. */
+export function zooUnits(data: SaveData): { done: number; total: number } {
+  const done = ZOO_SLOT_KEYS.filter((k) => data.zoo.slots[k]).length + (data.zoo.steps.includes("favorite") ? 1 : 0);
+  return { done, total: ZOO_SLOT_KEYS.length + 1 };
+}
+
+export function placeProgress(data: SaveData, place: "store" | "school" | "zoo"): number {
+  if (place === "store") return storeProgress(data);
+  if (place === "school") return schoolProgress(data);
+  const u = zooUnits(data);
+  return u.done / u.total;
 }

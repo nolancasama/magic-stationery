@@ -261,6 +261,21 @@ class AudioEngine {
       case "fish":
         for (let i = 0; i < 3; i++) this.tone(300 + i * 90, 0.07, { type: "sine", gain: 0.1, glide: 600, at: t + i * 0.15 });
         break;
+      case "elephant":
+        // A trumpet: a brassy rising blare.
+        this.tone(330, 0.75, { type: "sawtooth", gain: 0.07, glide: 520, attack: 0.08 });
+        this.tone(495, 0.7, { type: "square", gain: 0.03, glide: 780, attack: 0.1 });
+        break;
+      case "monkey":
+        for (let i = 0; i < 4; i++) this.tone(900 + (i % 2) * 300, 0.09, { type: "triangle", gain: 0.07, glide: 1400, at: t + i * 0.11 });
+        break;
+      case "penguin":
+        for (let i = 0; i < 2; i++) this.tone(520, 0.14, { type: "sawtooth", gain: 0.05, glide: 380, at: t + i * 0.18 });
+        break;
+      case "panda":
+        this.tone(260, 0.25, { type: "sine", gain: 0.08, glide: 200 });
+        this.tone(1100, 0.06, { type: "sine", gain: 0.04, at: t + 0.3 });
+        break;
       default:
         this.sparkle(3, 880);
     }

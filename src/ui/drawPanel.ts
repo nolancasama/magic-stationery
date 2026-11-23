@@ -7,7 +7,7 @@
  * click again to lift it - for children who cannot hold the button and move.
  */
 import { audio } from "../audio/audio.ts";
-import { CRAYONS, INK, renderDrawing, type Crayon, type Drawing, type DrawnFill, type DrawnStroke } from "../draw/drawing.ts";
+import { CRAYONS, DEFAULT_WIDTH, INK, PEN_WIDTHS, renderDrawing, type Crayon, type Drawing, type DrawnFill, type DrawnStroke, type PenWidth } from "../draw/drawing.ts";
 import { floodRegion, growIntoLines } from "../draw/fill.ts";
 import type { Point } from "../recognition/strokes.ts";
 import { tts } from "../speech/tts.ts";
@@ -52,7 +52,7 @@ export interface DrawDeps {
   onTouchpadToggle(on: boolean): void;
 }
 
-const LINE = 9;
+const LINE = DEFAULT_WIDTH;
 
 function crayonSvg(hex: string): string {
   return `<svg viewBox="0 0 40 70" xmlns="http://www.w3.org/2000/svg"><path d="M8 22 L20 2 L32 22Z" fill="${hex}"/><rect x="8" y="20" width="24" height="48" rx="4" fill="${hex}"/><rect x="8" y="30" width="24" height="26" fill="#fff" opacity=".45"/><rect x="8" y="33" width="24" height="3" fill="#000" opacity=".2"/><rect x="8" y="50" width="24" height="3" fill="#000" opacity=".2"/></svg>`;
@@ -142,6 +142,18 @@ export class DrawPanel {
     }
     this.palette.appendChild(this.colorName);
     this.pop = h("div", { class: "word-pop" });
+    // Pen widths: each button shows its own line; the choice applies to the next line drawn.
+    this.widths = h("div", { class: "widths", role: "radiogroup", "aria-label": "Pen width" });
+    const names: Record<PenWidth, [string, string]> = { thin: ["Thin", "ほそい"], medium: ["Medium", "ふつう"], thick: ["Thick", "ふとい"], extra: ["Extra thick", "とても ふとい"] };
+    for (const key of Object.keys(PEN_WIDTHS) as PenWidth[]) {
+      const px = PEN_WIDTHS[key];
+      const b = h("button", { class: "width-btn", "data-width": key, "data-test": `width-${key}`, title: names[key][0], "aria-label": names[key][0], role: "radio" }, h("i", { style: { width: `${Math.max(4, px)}px`, height: `${Math.max(4, px)}px` } }));
+      b.addEventListener("click", () => {
+        audio.click();
+        this.setWidth(key, true);
+      });
+      this.widths.appendChild(b);
+    }
     this.panel = h(
       "div",
       { class: "draw-panel" },
@@ -149,8 +161,10 @@ export class DrawPanel {
       this.wrap,
       side,
       this.palette,
+      this.widths,
       this.pop
     );
+    this.setWidth("medium", false);
     this.veil = h("div", { class: "draw-veil hidden" }, this.panel);
     parent.appendChild(this.veil);
     this.bindPointer();
@@ -158,6 +172,23 @@ export class DrawPanel {
   }
 
   private padMode = false;
+  private widths: HTMLDivElement;
+  /** Pen width for the next line (canvas px). Kept between drawings. */
+  private width: number = LINE;
+
+  setWidth(key: PenWidth, user: boolean) {
+    this.width = PEN_WIDTHS[key];
+    this.widths.querySelectorAll(".width-btn").forEach((b) => {
+      const on = (b as HTMLElement).dataset.width === key;
+      b.classList.toggle("sel", on);
+      b.setAttribute("aria-checked", String(on));
+    });
+    if (user) {
+      const ja: Record<PenWidth, string> = { thin: "ほそい ペン", medium: "ふつうの ペン", thick: "ふとい ペン", extra: "とても ふとい ペン" };
+      const en: Record<PenWidth, string> = { thin: "Thin pen!", medium: "Medium pen!", thick: "Thick pen!", extra: "Extra thick pen!" };
+      this.setBubble(en[key], ja[key]);
+    }
+  }
 
   get isOpen(): boolean {
     return !this.veil.classList.contains("hidden");
@@ -221,7 +252,7 @@ export class DrawPanel {
   }
 
   get drawing(): Drawing {
-    const d: Drawing = { strokes: this.strokes.map((s) => ({ color: s.color, points: s.points.slice() })) };
+    const d: Drawing = { strokes: this.strokes.map((s) => (s.width && s.width !== LINE ? { color: s.color, points: s.points.slice(), width: s.width } : { color: s.color, points: s.points.slice() })) };
     if (this.fills.length) d.fills = this.fills.map((f) => ({ ...f }));
     return d;
   }
@@ -246,7 +277,7 @@ export class DrawPanel {
 
   private bindPointer() {
     const start = (p: Point) => {
-      this.current = { color: this.color.hex, points: [p] };
+      this.current = { color: this.color.hex, points: [p], width: this.width };
       this.strokes.push(this.current);
       this.actions.push("s");
       this.dot(p);
@@ -288,7 +319,7 @@ export class DrawPanel {
       const d = Math.hypot(p[0] - last[0], p[1] - last[1]);
       if (d < 1.5) return;
       pts.push(p);
-      this.segment(last, p, this.current.color);
+      this.segment(last, p, this.current.color, this.current.width ?? LINE);
       const now = performance.now();
       const speed = Math.hypot(p[0] - this.lastMove.x, p[1] - this.lastMove.y) / Math.max(1, now - this.lastMove.t);
       this.lastMove = { x: p[0], y: p[1], t: now };
@@ -330,8 +361,9 @@ export class DrawPanel {
     return g;
   }
 
-  private segment(a: Point, b: Point, color: string) {
+  private segment(a: Point, b: Point, color: string, width: number) {
     const g = this.ctx();
+    g.lineWidth = width;
     g.strokeStyle = color;
     g.beginPath();
     g.moveTo(a[0], a[1]);
@@ -343,7 +375,7 @@ export class DrawPanel {
     const g = this.ctx();
     g.fillStyle = this.color.hex;
     g.beginPath();
-    g.arc(p[0], p[1], LINE / 2, 0, Math.PI * 2);
+    g.arc(p[0], p[1], this.width / 2, 0, Math.PI * 2);
     g.fill();
   }
 
@@ -355,13 +387,14 @@ export class DrawPanel {
     const g = c.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
     g.lineCap = "round";
     g.lineJoin = "round";
-    g.lineWidth = LINE * 1.8;
     g.strokeStyle = "#000";
     g.fillStyle = "#000";
     for (const s of this.strokes) {
+      const w = s.width ?? LINE;
+      g.lineWidth = w * 1.8;
       g.beginPath();
       if (s.points.length === 1) {
-        g.arc(s.points[0][0], s.points[0][1], LINE, 0, Math.PI * 2);
+        g.arc(s.points[0][0], s.points[0][1], w, 0, Math.PI * 2);
         g.fill();
         continue;
       }
@@ -412,7 +445,8 @@ export class DrawPanel {
     for (const f of this.fills) {
       const r = floodRegion(line, W, H, f.x, f.y);
       if (!r) continue;
-      const grown = growIntoLines(r, line, W, H, Math.ceil(LINE * 0.6));
+      const widest = Math.max(LINE, ...this.strokes.map((s) => s.width ?? LINE));
+      const grown = growIntoLines(r, line, W, H, Math.ceil(widest * 0.6));
       const n = parseInt(f.color.slice(1), 16);
       for (let i = 0; i < W * H; i++) {
         if (!grown[i]) continue;
@@ -433,9 +467,10 @@ export class DrawPanel {
     for (const s of this.strokes) {
       g.strokeStyle = s.color;
       g.fillStyle = s.color;
+      g.lineWidth = s.width ?? LINE;
       if (s.points.length === 1) {
         g.beginPath();
-        g.arc(s.points[0][0], s.points[0][1], LINE / 2, 0, Math.PI * 2);
+        g.arc(s.points[0][0], s.points[0][1], (s.width ?? LINE) / 2, 0, Math.PI * 2);
         g.fill();
         continue;
       }
@@ -582,7 +617,7 @@ export class DrawPanel {
 
   /** Test hook: replace the drawing with these strokes (canvas pixels). */
   inject(d: Drawing) {
-    this.strokes = d.strokes.map((s) => ({ color: s.color, points: s.points.slice() }));
+    this.strokes = d.strokes.map((s) => ({ color: s.color, points: s.points.slice(), width: s.width }));
     this.fills = (d.fills ?? []).map((f) => ({ ...f }));
     this.actions = [...this.strokes.map(() => "s" as const), ...this.fills.map(() => "f" as const)];
     this.redraw();

@@ -37,13 +37,13 @@ function best(label: string, minStrokes = 1, maxStrokes = 9): Stroke[] {
   return pick;
 }
 
-const WORD_LABEL: Record<string, string> = { pencil: "pencil", pen: "marker", eraser: "eraser", scissors: "scissors", book: "book", crayon: "crayon", schoolbag: "backpack", desk: "table", chair: "chair" };
+const WORD_LABEL: Record<string, string> = { pencil: "pencil", pen: "marker", eraser: "eraser", scissors: "scissors", book: "book", crayon: "crayon", schoolbag: "backpack", desk: "table", chair: "chair", elephant: "elephant", monkey: "monkey", panda: "panda", penguin: "penguin", banana: "banana" };
 const examples: Record<string, Stroke[]> = {};
 for (const [word, label] of Object.entries(WORD_LABEL)) examples[word] = best(label, 2);
 fs.writeFileSync(path.join(root, "src/recognition/examples.json"), JSON.stringify(examples));
 
 const fixtures: Record<string, Stroke[]> = {};
-for (const label of ["pencil", "eraser", "scissors", "book", "crayon", "backpack", "rabbit", "cat", "squiggle", "table", "chair"]) fixtures[label] = best(label, 1, 12);
+for (const label of ["pencil", "eraser", "scissors", "book", "crayon", "backpack", "rabbit", "cat", "squiggle", "table", "chair", "elephant", "monkey", "panda", "penguin", "banana"]) fixtures[label] = best(label, 1, 12);
 fs.mkdirSync(path.join(root, "tests/fixtures"), { recursive: true });
 fs.writeFileSync(path.join(root, "tests/fixtures/drawings.json"), JSON.stringify(fixtures));
 console.log("wrote examples and fixtures");

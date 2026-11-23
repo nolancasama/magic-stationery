@@ -143,7 +143,8 @@ src/ui/           hud, dialogue, ask prompt, draw panel, settings (teacher), sty
   time is it?" — write digits on a blank clock (digit recogniser); missing lowercase letters on the
   alphabet strip (letter recogniser, constrained to the expected letter); timetable from NPC answers
   (deferred). Bell rings, students sit.
-- **Zoo:** animals with species behaviours (monkeys climb and eat the bananas you draw, elephants
+- **Zoo — BUILT (2026-11-23), see §7** (elephants, monkeys, pandas, penguins). Original design:
+  animals with species behaviours (monkeys climb and eat the bananas you draw, elephants
   trumpet and spray, giraffes browse, penguins slide and dive, fish swim, ducks paddle, pandas sit and
   eat bamboo — bamboo by stencil/rule). "Do you like elephants?", "What animal do you like?".
 - **Supermarket:** quantities ("three apples"), placement into baskets, colour disambiguation for
@@ -173,3 +174,17 @@ or hands, four blank cards in the alphabet strip. Opens once the Stationery Stor
 
 Writing uses the glyph model (`src/recognition/glyphs.ts`, training in `tools/sketch-model/README.md`)
 with the same help ladder as drawing (example → trace stencil → the pen helps on the third try).
+
+## 7. Level 3 — Zoo (built)
+
+Mr. Oka's zoo, erased: four empty enclosures with faint outlines of the missing animals. Opens once the
+classroom is finished.
+
+1. **Hello.** "Hello! Welcome to the zoo!" → the player says **"Hello!"**.
+2. **Elephants** (draw an elephant; two walk and spray water). Yui: **"Do you like elephants?"** →
+   "Yes, I do." / "No, I don't." — both right; "Me too!" / "Oh! I like elephants!".
+3. **Monkeys** hang and swing in their tree. "They're hungry! Draw a **banana**!" — the bananas fly to them.
+4. **Pandas** sit. "Pandas like **bamboo**. Make it long!" (long-thin rule) — they munch.
+5. **Penguins** waddle and dive into the pool. Ken: **"Do you like penguins?"**
+6. The player asks Mr. Oka **"What animal do you like?"** ("I like pandas!"). Taro asks the player, who
+   answers **"I like ___."** from elephants / monkeys / pandas / penguins. Album of the child's animals.

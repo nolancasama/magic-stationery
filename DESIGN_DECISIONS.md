@@ -210,3 +210,86 @@ Ported from monster-island (`speech/recognition.ts`, `tts.ts`, matcher rules):
 - **Why:** levels 3-5 reuse the same helpers; a second copy of the controller per level would drift.
 - **Rendering budget:** the clock face and the 26-card alphabet strip are each one canvas texture with the
   child's handwriting painted in (not 26+12 meshes).
+
+## 2026-11-23 — Fix pass (user plan "Bug Fixes, Movement Improvements, Speech Recognition, and Unfinished Work")
+
+Built directly by Claude at the user's request. Verdict on the plan: accepted, with these modifications.
+
+- **Slow "eight … thirty" was a logic bug, not only endpointing.** The prompt accepted any matching interim
+  result at once, so "eight" (before the pause) matched "It's eight o'clock." and the truth check then called
+  the child wrong. Now: (1) a match that could still grow into another option (`couldGrow`: "eight" when
+  8:30 is offered) waits for 3 s of quiet; (2) listening is continuous and all segments are joined; (3) if a
+  browser still ends the session after "eight", one continuation session is started and the parts joined;
+  (4) times are judged by value (`parseTime`: "8:30", "8 30", "830", "eight-thirty", "ate thirty", 7:15,
+  10:45, 12:00), not by key words; (5) a tip with a listen button ("Try saying 'eight thirty' together.")
+  appears only after a wrong attempt; taps remain the rescue. Rejected: tuning browser silence thresholds
+  (not configurable in Chrome's recogniser).
+- **Movement:** WASD + arrows, camera-relative (W = away from the camera), smooth acceleration and stopping,
+  sliding along furniture, other people block a key-driven player; allowed exactly when clicking the floor
+  is (never while drawing, speaking or in a scripted scene). Click-to-move kept unchanged. The diorama
+  cameras are fixed, so no camera follow or clipping issue arises.
+- **Gaze:** `Character.lookTarget` turns the head first (up to ±0.8 rad, with pitch) and the body only when
+  the person is further round than `bodyTurn` (host 1.15 rad), so small moves never spin anyone; the host
+  returns to her working direction after 1.5 s without a conversation. The speaker (or the person just
+  spoken to) and the host watch the player; the player looks at whoever is talking.
+- **Held items:** one grip rule (`Character.hold` + `GRIPS` per item): across the fist, perpendicular to the
+  forearm, gripped a set fraction along the item (pencil 0.32, ruler 0.14, magic pen tip forward). Fixes
+  items running up inside the arm. The magic pen is now re-attached after a reload (it was lost).
+- **Accessories:** under a hat only a short fringe tucked under the brim is built and spiky hair becomes
+  side spikes (no hair through the crown); the yellow hat's brim sits at its crown's rim. Glasses are fitted
+  to the head radius: rims clear of the eyes, turned with the face's curve, a bridge, and temple arms that
+  bow outside the cheeks to the ears.
+- **Shop:** the notebook board faced the back wall (rotation sign); now it faces the customers, with a back
+  support and a front ledge carrying the label (the sign no longer passes through the table). Notebook
+  drawings lean at the board's slope.
+- **Z-fighting at doors:** the door jamb ended exactly at the wall's end (z = 1.0) with coplanar faces; the
+  jamb now wraps 2 cm past it (shop and classroom). Fixed at the geometry, no polygon offsets.
+- **Class 4-1 sign:** centred over the door opening above the lintel, on both faces of the wall; the bell
+  speaker moved beside the door.
+- **Pen widths:** thin 5 / medium 9 (the original) / thick 16 / extra 26 canvas px, buttons in the panel's
+  empty bottom-right corner showing their own line, the selected one marked. Width is per stroke, kept in the
+  saved art (`ArtStroke.w`, only when not the default, so old saves are unchanged) and used by every renderer
+  (living object, album, fills). Recognition uses only the points, so it is unaffected.
+- **Level 2 finish:** "Sit down, please." — the students sit (new `sit` pose) and stay seated on return.
+
+## 2026-11-23 — Level 3, the Zoo (built directly by Claude; the user chose the next level over more testing first)
+
+- **What:** Mr. Oka's zoo: four enclosures (elephants with a pool, a monkey tree with a feeding stump, a panda
+  garden, a penguin pool with ice floes), a visitors' path, a gate. Draw an elephant (they walk and spray
+  water), Yui: "Do you like elephants?"; monkeys (hang and swing in the tree) and a banana (they eat it);
+  a panda and bamboo (they munch); penguins (waddle and dive into the pool), Ken: "Do you like penguins?";
+  the player asks Mr. Oka "What animal do you like?" and answers Taro "I like ___." Opens once the
+  classroom is finished.
+- **Why:** *Let's Try!* "Do you like …? Yes, I do / No, I don't" and "What animal do you like? I like …".
+  "Do you like …?" is the child's preference, so both answers are right (unlike the shop's truthful
+  "Do you have …?"), and the asker answers back ("Me too!" / "Oh! I like elephants!").
+- **Life:** every restored animal runs its own loop while the player is at the zoo (elephants walk + spray,
+  monkeys swing and hop, pandas rock and munch once bamboo exists, penguins waddle and dive), reusing the
+  living-drawing behaviours with each pen as the roam area.
+- **Bamboo** is not a Quick, Draw! category: the long-thin rule (like the ruler) plus partial credit for
+  line / palm tree / tree / grass; hand-made hint with leaves kept tight so the hint itself passes the rule.
+- **Deferred from SPEC §5:** giraffes, fish, ducks (four species keep the level a class-period long).
+
+## 2026-11-24 — Verification pass: the zoo stood frozen, table corners held the player
+
+Found by the first complete e2e run of the fix pass and the Zoo (built directly by Claude, continuing the
+user's "Claude directly" work).
+
+- **Rooms are "any level room", never a list of names.** `Game.update` updated rooms and characters only
+  for `"store" || "school"`, so in the zoo nobody moved: the level script waited forever on the player's
+  first walk and the zoo could not be played. Gaze had the same list. Both now use `inLevelRoom`
+  (`area` is set and is not the town), so a new level cannot be left out.
+- **Key steering glides round corners.** It tried the full step, then each axis alone. Against a table's
+  rounded corner the axis steps were blocked or almost zero-length, so a child holding one arrow key
+  stuck there. Now an axis slide must carry ≥ 25% of the step; otherwise the step is tried turned by up
+  to ~70° either way (smallest turn first, shortened by its cosine). The player glides round convex
+  corners and round people met at an angle; walking head-on into a wall or a person still stops (every
+  turn is < 90°, so it still points into them).
+- **Route walks cannot walk on the spot.** A route "slide" must carry ≥ 5% of the step, else the walk ends
+  there. A zero-length slide used to count as a move, so a blocked walk could run forever and hang the
+  script awaiting it.
+- **Rejected:** circle-against-rectangle push-out (needs obstacle geometry in `Character`, which only has a
+  boolean `collide`); the turned-step search gives the same feel with the existing interface.
+- **E2E lesson:** Chromium 153+ has a native unprefixed `SpeechRecognition`, which the game prefers, so a
+  test's fake recogniser must replace both names. The earlier "hang" was the real recogniser hearing
+  silence in a headless browser; the game itself answered "I didn't hear you" correctly.

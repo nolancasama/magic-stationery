@@ -25,6 +25,8 @@ export const ROOM: Rect = { minX: -4.45, maxX: 4.45, minZ: -2.95, maxZ: 2.95 };
 export const DOOR = { x: 4.25, z: 1.7, outsideX: 5.6 };
 export const COUNTER_FRONT = { x: -2.75, z: 0.05 };
 export const PENNY_SPOT = { x: -3.5, z: -1.58 };
+/** The notebook board's slope (rotation about x; positive = its face towards the customers). */
+export const NOTEBOOK_SLOPE = 0.95;
 
 const OBSTACLES: Rect[] = [
   { minX: -4.25, maxX: -1.85, minZ: -1.2, maxZ: -0.4 }, // counter
@@ -217,21 +219,24 @@ export class StoreArea implements RoomArea {
     p.box(0.62, 0.36, 0.03, "#f9a825", { p: [0.9, 0.94, 0.18] });
     for (const sx of [-1, 1]) p.box(0.03, 0.26, 0.24, "#f9a825", { p: [0.9 + sx * 0.31, 0.88, 0.3] });
     p.box(0.5, 0.1, 0.005, "#e53935", { p: [0.9, 0.88, 0.437] });
-    // Notebook stand: a slanted board.
-    p.box(1.3, 0.04, 0.5, "#90a4ae", { p: [2.5, 0.95, 0.3], r: [-0.95, 0, 0] });
-    p.box(1.3, 0.06, 0.04, "#78909c", { p: [2.5, 0.78, 0.5] });
+    // Notebook stand: a board sloping up towards the back, its face to the customers,
+    // a back support, and a front ledge that holds the notebooks and carries the label.
+    p.box(1.3, 0.04, 0.5, "#90a4ae", { p: [2.5, 0.98, 0.3], r: [NOTEBOOK_SLOPE, 0, 0] });
+    p.box(1.3, 0.4, 0.03, "#78909c", { p: [2.5, 0.955, 0.13] });
+    p.box(1.3, 0.13, 0.03, "#78909c", { p: [2.5, 0.82, 0.47] });
     this.solid(p.mesh(worldMat));
     const label = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.15), worldBasicMaterial({ map: signTexture("CRAYONS", { bg: "#ffffff", fg: "#e53935" }), transparent: true }));
     label.position.set(0.9, 0.9, 0.44);
     this.scene.add(label);
-    const nb = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.17), worldBasicMaterial({ map: signTexture("NOTEBOOKS", { bg: "#fff3d6", fg: "#455a64" }), transparent: true }));
-    nb.position.set(2.5, 0.76, 0.525);
+    const nb = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.11), worldBasicMaterial({ map: signTexture("NOTEBOOKS", { bg: "#fff3d6", fg: "#455a64" }), transparent: true }));
+    nb.position.set(2.5, 0.82, 0.488);
     this.scene.add(nb);
   }
 
   private buildDoor(): THREE.Group {
     const frame = new Parts();
-    frame.box(0.24, 2.5, 0.1, "#8d6e63", { p: [4.6, 1.25, 0.95] });
+    // The jamb wraps 2 cm past the wall's end (z 1.0): no coplanar faces to z-fight.
+    frame.box(0.24, 2.5, 0.12, "#8d6e63", { p: [4.6, 1.25, 0.96] });
     frame.box(0.24, 2.5, 0.1, "#8d6e63", { p: [4.6, 1.25, 2.45] });
     frame.box(0.24, 0.12, 1.6, "#8d6e63", { p: [4.6, 2.52, 1.7] });
     frame.sphere(0.07, "#f4c542", { p: [4.44, 2.36, 1.7] }, 10, 8);
@@ -327,7 +332,8 @@ export class StoreArea implements RoomArea {
     for (const [y, z] of [[0.825, -2.55], [1.575, -2.66]] as const) for (const x of [-0.8, 0.1, 1.0]) books.push({ p: v(x, y, z), r: e(-0.16, 0, 0) });
     const bags: Anchor[] = [2.35, 3.1, 3.85].map((x) => ({ p: v(x, 1.56, -2.8), r: e(0, 0, 0) }));
     const crayons: Anchor[] = [0, 1, 2, 3, 4, 5].map((i) => ({ p: v(0.9 - 0.225 + i * 0.09, 0.8, 0.3), r: e(-0.18, 0, 0), s: 1.1 }));
-    const notebooks: Anchor[] = [2.08, 2.5, 2.92].map((x) => ({ p: v(x, 0.84, 0.46), r: e(Math.PI / 2 - 0.95, 0, 0) }));
+    // On the sloping board, resting on the ledge (drawings lean back at the board's slope: game DISPLAY).
+    const notebooks: Anchor[] = [2.08, 2.5, 2.92].map((x) => ({ p: v(x, 0.82, 0.45), r: e(NOTEBOOK_SLOPE, 0, 0) }));
 
     const make = (id: SlotId, word: WordId, anchors: Anchor[], marker: THREE.Vector3, stand: { x: number; z: number }, view: View, hot: [THREE.Vector3, THREE.Vector3]): Slot => {
       const ghosts = anchors.map((a, i) => {

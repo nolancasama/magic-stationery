@@ -16,6 +16,11 @@ export interface Phrase {
   forbid?: string[];
   /** Wrong-but-plausible sentences shown with it when taps are the rescue. */
   distractors?: PhraseId[];
+  /**
+   * A time sentence: judged by the time heard (hour, minutes), in any spoken or
+   * written form, instead of by key words (speech/match.ts parseTime).
+   */
+  time?: [number, number];
 }
 
 export type PhraseId =
@@ -31,7 +36,14 @@ export type PhraseId =
   | "goodMorning"
   | "itsSeven"
   | "itsEight"
-  | "itsEightThirty";
+  | "itsEightThirty"
+  | "likeYes"
+  | "likeNo"
+  | "whatAnimal"
+  | "iLikeElephants"
+  | "iLikeMonkeys"
+  | "iLikePandas"
+  | "iLikePenguins";
 
 const HAVE = ["have", "has", "had", "half", "haf", "hab", "habu", "hav", "haven", "halve", "heave", "hove", "happen", "happened", "having", "havea", "of", "ever"];
 const PEN = ["pen", "pens", "pen's", "penn", "pin", "pins", "pan", "pans", "ben", "pain", "pent", "penny", "happen", "happened", "apen", "upen", "pem", "pend", "pain", "spen"];
@@ -43,6 +55,13 @@ const SEVEN = ["seven", "7", "heaven", "sevens", "seben", "sven", "kevin"];
 const EIGHT = ["eight", "8", "ate", "eighth", "eit", "eat", "hate", "eighty", "eights"];
 const THIRTY = ["thirty", "30", "dirty", "thirsty", "therty", "thurty", "sirty", "shirty", "sardy", "sati", "turkey"];
 const MORNING = ["morning", "mornin", "moaning", "mooning", "mourning", "morningu", "mooring", "warning", "goodmorning"];
+// The Zoo (Level 3).
+const LIKE = ["like", "likes", "lie", "light", "lake", "bike", "liked", "ilike", "lik"];
+const ANIMAL = ["animal", "animals", "anymal", "animo", "animals", "enemy", "anima", "an animal"];
+const ELEPHANT = ["elephant", "elephants", "elefant", "elephan", "elegant", "element", "relevant"];
+const MONKEY = ["monkey", "monkeys", "monkee", "mankey", "manky", "funky", "monk"];
+const PANDA = ["panda", "pandas", "banda", "fonda", "honda", "pander"];
+const PENGUIN = ["penguin", "penguins", "pinguin", "pengwin", "penguine", "pen win", "pingu"];
 const YOU = ["you", "u", "yu", "your", "you're", "youre", "ya", "yo", "yoo", "ewe", "yew", "foryou", "4you", "ewe", "hue", "q"];
 
 export const PHRASES: Record<PhraseId, Phrase> = {
@@ -68,7 +87,16 @@ export const PHRASES: Record<PhraseId, Phrase> = {
   iLikeRed: { id: "iLikeRed", en: "I like red.", keys: [["like"], ["red"]] },
   hello: { id: "hello", en: "Hello!", keys: [["hello", "hi", "hallo", "hullo"]] },
   goodMorning: { id: "goodMorning", en: "Good morning!", ja: "おはようございます！", keys: [MORNING], distractors: ["hello", "thankYou"] },
-  itsSeven: { id: "itsSeven", en: "It's seven o'clock.", ja: "7じです。", keys: [SEVEN], forbid: [...THIRTY, ...EIGHT] },
-  itsEight: { id: "itsEight", en: "It's eight o'clock.", ja: "8じです。", keys: [EIGHT], forbid: [...THIRTY, ...SEVEN] },
-  itsEightThirty: { id: "itsEightThirty", en: "It's eight thirty.", ja: "8じ30ぷんです。", keys: [EIGHT, THIRTY], forbid: SEVEN }
+  // Times are judged by value (match.ts parseTime); keys document the words only.
+  itsSeven: { id: "itsSeven", en: "It's seven o'clock.", ja: "7じです。", keys: [SEVEN], time: [7, 0] },
+  itsEight: { id: "itsEight", en: "It's eight o'clock.", ja: "8じです。", keys: [EIGHT], time: [8, 0] },
+  itsEightThirty: { id: "itsEightThirty", en: "It's eight thirty.", ja: "8じ30ぷんです。", keys: [EIGHT, THIRTY], time: [8, 30] },
+  // "Do you like elephants?" — the child's own preference: both answers are right.
+  likeYes: { id: "likeYes", en: "Yes, I do.", ja: "はい、すきです。", keys: [YES], forbid: NO },
+  likeNo: { id: "likeNo", en: "No, I don't.", ja: "いいえ、すきでは ありません。", keys: [NO], forbid: ["yes", "yeah", "yep", "yup"] },
+  whatAnimal: { id: "whatAnimal", en: "What animal do you like?", ja: "どんな どうぶつが すきですか？", keys: [ANIMAL, LIKE], distractors: ["doYouLikePens", "whatTimeIsIt"] },
+  iLikeElephants: { id: "iLikeElephants", en: "I like elephants.", ja: "ぞうが すきです。", keys: [LIKE, ELEPHANT] },
+  iLikeMonkeys: { id: "iLikeMonkeys", en: "I like monkeys.", ja: "さるが すきです。", keys: [LIKE, MONKEY] },
+  iLikePandas: { id: "iLikePandas", en: "I like pandas.", ja: "パンダが すきです。", keys: [LIKE, PANDA] },
+  iLikePenguins: { id: "iLikePenguins", en: "I like penguins.", ja: "ペンギンが すきです。", keys: [LIKE, PENGUIN] }
 };

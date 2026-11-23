@@ -24,16 +24,59 @@ export interface Look {
   scale?: number;
 }
 
-export type Pose = "idle" | "walk" | "talk" | "cheer" | "wave" | "point" | "give" | "sad" | "think" | "surprised" | "nod" | "shake" | "jump" | "laugh";
+export type Pose = "idle" | "walk" | "talk" | "cheer" | "wave" | "point" | "give" | "sad" | "think" | "surprised" | "nod" | "shake" | "jump" | "laugh" | "sit";
 
 export type Collide = (x: number, z: number, radius: number) => boolean;
 
+/** Key steering: an axis slide needs at least this share of the step, else the corner is rounded. */
+const DRIVE_SLIDE_MIN = 0.25;
+/** Route walking: an axis slide needs at least this share of the step, else the walk ends there. */
+const ROUTE_SLIDE_MIN = 0.05;
+/**
+ * Turns (radians) tried when a key-steered step is blocked both straight and along each axis:
+ * up to ~70° either way, smallest first. A step turned less than 90° never slides along a flat
+ * wall pushed head-on, nor round a person walked straight at; it rounds convex corners.
+ */
+const CORNER_TURNS = [0.3, -0.3, 0.6, -0.6, 0.9, -0.9, 1.2, -1.2];
+
 const tmp = new THREE.Vector3();
+
+const HEAD_R = 0.27;
+const FRAME = "#5b3a29";
+
+/** A box from a to b (a temple arm of the glasses). */
+function rod(p: Parts, a: [number, number, number], b: [number, number, number], t: number, col: Col) {
+  const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  const len = d.length();
+  const yaw = Math.atan2(d.x, d.z);
+  const pitch = -Math.asin(d.y / len);
+  p.box(t, t, len, col, { p: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], r: [pitch, yaw, 0] });
+}
+
+/**
+ * Glasses fitted to a head of radius r: rims stand clear of the eyes (which
+ * bulge to ~0.96 r), each rim turned to follow the face's curve, a bridge on the
+ * nose line, and temple arms that bow outside the cheek to the ears.
+ */
+function addGlasses(p: Parts, r: number) {
+  const ex = r * 0.34;
+  const rim = r * 0.215;
+  const z = r * 1.005;
+  for (const sx of [-1, 1]) {
+    p.torus(rim, 0.0095, FRAME, { p: [sx * ex, -0.005, z], r: [0, sx * 0.32, 0] }, Math.PI * 2, 5, 16);
+    const outer: [number, number, number] = [sx * (ex + rim * Math.cos(0.32)), 0.01, z - rim * Math.sin(0.32)];
+    const bend: [number, number, number] = [sx * r * 0.87, 0.012, r * 0.63];
+    const ear: [number, number, number] = [sx * r * 1.05, 0.0, r * 0.12];
+    rod(p, outer, bend, 0.011, FRAME);
+    rod(p, bend, ear, 0.011, FRAME);
+  }
+  p.box(ex * 2 - rim * 2 + 0.01, 0.011, 0.011, FRAME, { p: [0, 0.012, z + 0.012] });
+}
 
 function buildHead(look: Look): THREE.BufferGeometry {
   const p = new Parts();
   const hy = 0.27;
-  p.sphere(0.27, look.skin, { p: [0, 0, 0] }, 18, 14);
+  p.sphere(HEAD_R, look.skin, { p: [0, 0, 0] }, 18, 14);
   // Ears.
   p.sphere(0.05, look.skin, { p: [-0.265, -0.02, 0], s: [0.6, 1, 0.8] });
   p.sphere(0.05, look.skin, { p: [0.265, -0.02, 0], s: [0.6, 1, 0.8] });
@@ -44,11 +87,15 @@ function buildHead(look: Look): THREE.BufferGeometry {
     p.sphere(0.042, "#ff9aa8", { p: [sx * 0.155, -0.075, 0.205], s: [1, 0.55, 0.35] }, 8, 6);
   }
   p.torus(0.034, 0.009, "#7a3340", { p: [0, -0.085, 0.255], r: [0.25, 0, Math.PI] }, Math.PI, 5, 10);
-  // Hair.
+  // Hair. Under a hat, only what shows below the brim is built: a short fringe
+  // tucked under the front rim and no spikes (they would pierce the crown).
   const hair = look.hair;
   const style = look.hairStyle;
+  const extras = look.extras ?? [];
+  const hatted = extras.includes("cap") || extras.includes("yellowHat");
   p.dome(0.288, hair, { p: [0, 0.005, -0.01], r: [-0.55, 0, 0] }, style === "bob" ? Math.PI * 0.62 : Math.PI * 0.55, 18, 8);
-  p.sphere(0.17, hair, { p: [0, 0.165, 0.14], s: [1.45, 0.42, 0.7] });
+  if (hatted) p.sphere(0.15, hair, { p: [0, 0.075, 0.19], s: [1.3, 0.32, 0.55] });
+  else p.sphere(0.17, hair, { p: [0, 0.165, 0.14], s: [1.45, 0.42, 0.7] });
   if (style === "bob") {
     p.sphere(0.14, hair, { p: [-0.2, -0.06, -0.03], s: [0.75, 1.25, 1] });
     p.sphere(0.14, hair, { p: [0.2, -0.06, -0.03], s: [0.75, 1.25, 1] });
@@ -57,25 +104,25 @@ function buildHead(look: Look): THREE.BufferGeometry {
     p.sphere(0.1, hair, { p: [0.31, -0.06, -0.06], s: [0.85, 1.2, 0.85] });
   } else if (style === "bun") {
     p.sphere(0.115, hair, { p: [0, 0.27, -0.12] });
-  } else if (style === "spiky") {
+  } else if (style === "spiky" && !hatted) {
     for (let i = 0; i < 5; i++) {
       const a = -0.6 + i * 0.3;
       p.cone(0.06, 0.14, hair, { p: [Math.sin(a) * 0.2, 0.24, -0.05 + Math.cos(a) * 0.02], r: [-0.4, 0, -a * 0.8] }, 6);
     }
+  } else if (style === "spiky") {
+    // Spikes poking out sideways under the cap.
+    for (const sx of [-1, 1]) p.cone(0.045, 0.1, hair, { p: [sx * 0.25, 0.06, 0.05], r: [0, 0, -sx * 1.9] }, 6);
   }
-  const extras = look.extras ?? [];
   const ec = look.extraColor ?? "#ff7043";
-  if (extras.includes("glasses")) {
-    for (const sx of [-1, 1]) p.torus(0.058, 0.01, "#5b3a29", { p: [sx * 0.092, -0.005, 0.25] }, Math.PI * 2, 5, 14);
-    p.box(0.07, 0.012, 0.012, "#5b3a29", { p: [0, 0.01, 0.262] });
-  }
+  if (extras.includes("glasses")) addGlasses(p, HEAD_R);
   if (extras.includes("cap")) {
     p.dome(0.3, ec, { p: [0, 0.03, 0], r: [-0.25, 0, 0] }, Math.PI * 0.45, 16, 6);
     p.cyl(0.2, 0.2, 0.02, shade(ec, 0.85), { p: [0, 0.12, 0.26], r: [0.25, 0, 0], s: [1, 1, 0.75] }, 14);
   }
   if (extras.includes("yellowHat")) {
     p.dome(0.3, "#ffd23f", { p: [0, 0.04, 0], r: [-0.12, 0, 0] }, Math.PI * 0.42, 16, 6);
-    p.cyl(0.4, 0.4, 0.02, "#ffc61a", { p: [0, 0.1, 0], r: [-0.12, 0, 0] }, 18);
+    // The brim sits at the crown's rim (no gap showing the hair through it).
+    p.cyl(0.4, 0.4, 0.024, "#ffc61a", { p: [0, 0.114, 0], r: [-0.12, 0, 0] }, 18);
   }
   if (extras.includes("bows")) {
     for (const sx of [-1, 1]) {
@@ -151,6 +198,20 @@ export class Character {
   onStep: (() => void) | null = null;
   private lastStep = 0;
   private hop = 0;
+  /**
+   * A world point to look at (a face). The head turns first; the body follows
+   * only when the point is further round than `bodyTurn` radians, so small moves
+   * of the other person never make the character spin.
+   */
+  lookTarget: THREE.Vector3 | null = null;
+  bodyTurn = 1.0;
+  private lookYaw = 0;
+  private lookPitch = 0;
+  /** Keyboard steering: desired direction (x, z), length 0..1. */
+  readonly drive = new THREE.Vector2();
+  private vel = new THREE.Vector2();
+  /** Extra collision while steered by keys (other people). */
+  driveCollide: Collide | null = null;
 
   constructor(readonly look: Look) {
     const s = look.scale ?? 1;
@@ -247,10 +308,98 @@ export class Character {
     return token === this.routeToken;
   }
 
+  /**
+   * Hold an object in the right hand: across the fist (perpendicular to the
+   * forearm, so it never runs up inside the arm), gripped `grip` of the way
+   * along its length. `length` is the object's height along its own +y, with
+   * its origin at one end; `flip` points the origin end forward (a pen's tip).
+   * `turn` spins a flat object about its own axis so its face shows.
+   */
+  hold(obj: THREE.Object3D, opts: { length: number; grip: number; flip?: boolean; turn?: number; scale?: number }) {
+    const s = opts.scale ?? 1;
+    obj.removeFromParent();
+    const holder = new THREE.Group();
+    holder.rotation.x = opts.flip ? -Math.PI / 2 : Math.PI / 2;
+    holder.position.z = (opts.flip ? 1 : -1) * opts.grip * opts.length * s;
+    obj.position.set(0, 0, 0);
+    obj.rotation.set(0, opts.turn ?? 0, 0);
+    obj.scale.setScalar(s);
+    holder.add(obj);
+    this.hand.add(holder);
+  }
+
+  /** Remove everything held. */
+  emptyHand() {
+    while (this.hand.children.length) this.hand.remove(this.hand.children[0]);
+  }
+
+  /**
+   * Glide round a corner (or a person): take the blocked step turned a little either way,
+   * shortened by the cosine of the turn, if that is free. Returns false if every turn is blocked.
+   */
+  private roundCorner(blocked: (x: number, z: number) => boolean, dx: number, dz: number): boolean {
+    const p = this.root.position;
+    for (const a of CORNER_TURNS) {
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      const sx = (dx * c - dz * s) * c;
+      const sz = (dx * s + dz * c) * c;
+      if (!blocked(p.x + sx, p.z + sz)) {
+        p.x += sx;
+        p.z += sz;
+        return true;
+      }
+    }
+    return false;
+  }
+
   update(dt: number) {
     this.time += dt;
     if (this.poseUntil <= this.time && this.pose !== this.basePose) this.pose = this.basePose;
-    // Movement.
+    // Keyboard steering: smooth acceleration and stopping, slides along obstacles.
+    const want = this.drive;
+    if (want.lengthSq() > 0.0001 || this.vel.lengthSq() > 0.0004) {
+      if (want.lengthSq() > 0.0001 && this.target) {
+        this.routeToken++;
+        this.target = null;
+        this.arrive?.();
+      }
+      const k = Math.min(1, dt * (want.lengthSq() > 0.0001 ? 7 : 10));
+      this.vel.x += (want.x * this.speed - this.vel.x) * k;
+      this.vel.y += (want.y * this.speed - this.vel.y) * k;
+      const p = this.root.position;
+      const dx = this.vel.x * dt;
+      const dz = this.vel.y * dt;
+      const r = this.radius;
+      const blocked = (x: number, z: number) => !!this.collide?.(x, z, r) || !!this.driveCollide?.(x, z, r);
+      // An axis part this small is no slide: it only creeps (the player stuck on a table corner).
+      const min = Math.hypot(dx, dz) * DRIVE_SLIDE_MIN;
+      if (!blocked(p.x + dx, p.z + dz)) {
+        p.x += dx;
+        p.z += dz;
+      } else if (Math.abs(dx) > min && !blocked(p.x + dx, p.z)) {
+        p.x += dx;
+        this.vel.y = 0;
+      } else if (Math.abs(dz) > min && !blocked(p.x, p.z + dz)) {
+        p.z += dz;
+        this.vel.x = 0;
+      } else if (!this.roundCorner(blocked, dx, dz)) this.vel.set(0, 0);
+      const sp = this.vel.length();
+      this.moving = sp > 0.15;
+      if (sp > 0.05) this.headingGoal = Math.atan2(this.vel.x, this.vel.y);
+      if (this.moving) {
+        this.walkPhase += dt * sp * 6.2;
+        if (this.time - this.lastStep > 0.32) {
+          this.lastStep = this.time;
+          this.onStep?.();
+        }
+      }
+      if (want.lengthSq() <= 0.0001 && sp <= 0.02) {
+        this.vel.set(0, 0);
+        this.moving = false;
+      }
+    }
+    // Movement along a route.
     if (this.target) {
       const p = this.root.position;
       tmp.subVectors(this.target, p);
@@ -267,11 +416,14 @@ export class Character {
         const nz = p.z + tmp.z;
         const r = this.radius;
         const blocked = this.collide;
+        // A slide must make real progress; a zero-length "slide" would walk on the spot forever
+        // and the script awaiting this walk would never go on.
+        const min = step * ROUTE_SLIDE_MIN;
         if (!blocked || !blocked(nx, nz, r)) {
           p.x = nx;
           p.z = nz;
-        } else if (!blocked(nx, p.z, r)) p.x = nx;
-        else if (!blocked(p.x, nz, r)) p.z = nz;
+        } else if (Math.abs(tmp.x) > min && !blocked(nx, p.z, r)) p.x = nx;
+        else if (Math.abs(tmp.z) > min && !blocked(p.x, nz, r)) p.z = nz;
         else {
           this.target = null;
           this.moving = false;
@@ -285,6 +437,30 @@ export class Character {
         }
       }
     }
+    // Looking at someone: head first, body only when they are far round.
+    let yawGoal = 0;
+    let pitchGoal = 0;
+    if (this.lookTarget && !this.moving) {
+      const p = this.root.position;
+      const dx = this.lookTarget.x - p.x;
+      const dz = this.lookTarget.z - p.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.2) {
+        let rel = Math.atan2(dx, dz) - this.heading;
+        while (rel > Math.PI) rel -= Math.PI * 2;
+        while (rel < -Math.PI) rel += Math.PI * 2;
+        if (Math.abs(rel) > this.bodyTurn && Math.abs(this.headingGoal - this.heading) < 0.05) {
+          // Turn the body just enough that the head can do the rest comfortably.
+          this.headingGoal = this.heading + rel - Math.sign(rel) * 0.35;
+        }
+        yawGoal = Math.max(-0.8, Math.min(0.8, rel));
+        const eye = 1.0 * (this.look.scale ?? 1);
+        pitchGoal = Math.max(-0.3, Math.min(0.35, Math.atan2(eye - this.lookTarget.y, dist)));
+      }
+    }
+    const lk = Math.min(1, dt * 6);
+    this.lookYaw += (yawGoal - this.lookYaw) * lk;
+    this.lookPitch += (pitchGoal - this.lookPitch) * lk;
     // Turn.
     let dh = this.headingGoal - this.heading;
     while (dh > Math.PI) dh -= Math.PI * 2;
@@ -372,10 +548,25 @@ export class Character {
       case "shake":
         hy = Math.sin(t * 12) * 0.35;
         break;
+      case "sit":
+        // Seated at a desk: thighs forward, hands resting in front, a little lower.
+        lL = -1.45;
+        lR = -1.45;
+        aLx = -0.75;
+        aRx = -0.75;
+        aLz = 0.15;
+        aRz = -0.15;
+        bodyY = -0.05;
+        hy = Math.sin(t * 0.43) * 0.06;
+        break;
       default:
         hz = Math.sin(t * 0.7) * 0.05;
-        hy = Math.sin(t * 0.43) * 0.12;
+        // Idle glances around, but much less while looking at someone.
+        hy = Math.sin(t * 0.43) * (this.lookTarget ? 0.04 : 0.12);
     }
+    // The head turns towards whoever they are looking at (on top of the pose).
+    hy += this.lookYaw;
+    hx += this.lookPitch * 0.8;
     const k = Math.min(1, dt * 12);
     const damp = (cur: number, goal: number) => cur + (goal - cur) * k;
     this.armL.rotation.x = damp(this.armL.rotation.x, aLx);

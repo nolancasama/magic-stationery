@@ -36,6 +36,17 @@ const HAND: Partial<Record<WordId, Strokes>> = {
   ]
 };
 
+// Bamboo: a tall stalk with nodes and two small leaves (long and thin, like the ruler rule wants).
+HAND.bamboo = [
+  [[112, 0], [112, 255]],
+  [[142, 0], [142, 255]],
+  [[112, 60], [142, 60]],
+  [[112, 125], [142, 125]],
+  [[112, 190], [142, 190]],
+  [[142, 70], [154, 58], [160, 50], [154, 64], [142, 74]],
+  [[112, 140], [100, 128], [94, 120], [100, 134], [112, 144]]
+];
+
 const SOURCES: Partial<Record<WordId, Strokes>> = { ...(picked as Partial<Record<WordId, Strokes>>), ...HAND };
 
 export function exampleFor(word: WordId): Drawing | null {

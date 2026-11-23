@@ -28,7 +28,20 @@ export interface AskSpec {
   help?: string;
   /** Read the target aloud when the prompt opens (first time a phrase is met). */
   model?: boolean;
+  /**
+   * A gentle tip with a listen button ("Try saying 'eight thirty' together."),
+   * shown after a miss, or at once when `hintNow` (a retry after a wrong answer).
+   */
+  hint?: { en: string; ja: string; say: string };
+  hintNow?: boolean;
 }
+
+/** Quiet time after "eight..." before the shorter answer is taken (the child may still say "thirty"). */
+const SETTLE_MS = 3000;
+/** Quiet time after a finished sentence that matched nothing before it counts as said. */
+const ENDPOINT_MS = 1500;
+/** A continuation session (the browser stopped listening mid-answer) waits this long for more. */
+const CONTINUE_MS = 3000;
 
 export interface AskEnv {
   micAllowed(): boolean;
@@ -55,9 +68,14 @@ export class AskPrompt {
   private handle: ListenHandle | null = null;
   private blocked = false;
   private lastPress = 0;
-  private best: { id: PhraseId; heard: string } | null = null;
+  private best: { id: PhraseId; heard: string; pending?: boolean } | null = null;
   private sawSpeech = false;
   private wrongHeard = "";
+  /** Our own end-of-answer timer (continuous listening has no browser endpoint). */
+  private quietTimer = 0;
+  private stoppedByUs = false;
+  private continued = false;
+  private hintEl: HTMLDivElement;
   /** Test hook. */
   onSession: ((state: string) => void) | null = null;
 
@@ -69,6 +87,7 @@ export class AskPrompt {
     this.meter = h("i");
     this.status = h("div", { class: "status" });
     this.heard = h("div", { class: "heard" });
+    this.hintEl = h("div", { class: "ask-hint hidden", "data-test": "ask-hint" });
     this.el = h(
       "div",
       { class: "ask hidden" },
@@ -76,7 +95,8 @@ export class AskPrompt {
       h("div", {}, this.label, this.cards),
       h("div", { class: "mic-col" }, this.mic, h("div", { class: "meter" }, this.meter)),
       this.status,
-      this.heard
+      this.heard,
+      this.hintEl
     );
     this.mic.addEventListener("click", () => this.press());
     window.addEventListener("keydown", (e) => {
@@ -108,6 +128,7 @@ export class AskPrompt {
     } else this.q.style.display = "none";
     this.el.classList.remove("hidden");
     this.render();
+    this.showHint(!!spec.hintNow);
     if (this.mode === "speech") {
       this.setStatus("Tap the mic and speak!", "マイクを おして、えいごで いってね！");
       if (spec.model) void this.modelSentence();
@@ -152,6 +173,21 @@ export class AskPrompt {
 
   private setStatus(en: string, ja?: string) {
     this.status.innerHTML = `${en}${ja && this.env.japanese() ? ` <span class="ja">${ja}</span>` : ""}`;
+  }
+
+  /** The spec's tip, with a button that plays the sentence clearly. */
+  private showHint(on: boolean) {
+    const hint = this.spec?.hint;
+    this.hintEl.classList.toggle("hidden", !on || !hint);
+    if (!on || !hint) return;
+    this.hintEl.innerHTML = "";
+    const listen = h("button", { class: "listen", "aria-label": "Listen", "data-test": "ask-hint-listen" }, "🔊");
+    listen.addEventListener("click", (e) => {
+      e.stopPropagation();
+      audio.click();
+      void this.speakModel(hint.say);
+    });
+    this.hintEl.append(h("span", {}, "💡 ", hint.en), this.env.japanese() ? h("span", { class: "ja" }, hint.ja) : "", listen);
   }
 
   private setTapStatus() {
@@ -210,44 +246,87 @@ export class AskPrompt {
     this.startSession();
   }
 
-  private startSession() {
+  /** End the answer ourselves after a quiet spell (continuous listening). */
+  private armQuiet(ms: number) {
+    window.clearTimeout(this.quietTimer);
+    this.quietTimer = window.setTimeout(() => {
+      if (!this.handle) return;
+      this.stoppedByUs = true;
+      this.handle.stop();
+    }, ms);
+  }
+
+  /**
+   * One listening session. Listening continues through pauses ("eight...
+   * thirty"); everything heard so far is judged together. A complete match is
+   * taken at once; an answer that could still grow into another option ("eight"
+   * when "eight thirty" is on offer) waits for a quiet spell first.
+   * `prefix`: what was heard before the browser cut the previous session short.
+   */
+  private startSession(prefix = "") {
     const spec = this.spec as AskSpec;
     tts.cancel();
     audio.silence(true);
-    this.best = null;
-    this.sawSpeech = false;
-    this.wrongHeard = "";
-    this.heard.textContent = "";
+    if (!prefix) {
+      this.best = null;
+      this.sawSpeech = false;
+      this.wrongHeard = "";
+      this.heard.textContent = "";
+      this.continued = false;
+    }
+    this.stoppedByUs = false;
     this.mic.className = "mic listening";
-    this.setStatus("Listening… Just speak!", "きいているよ… はなしてね！");
-    this.onSession?.("listening");
+    this.setStatus(prefix ? "Keep going…" : "Listening… Take your time!", prefix ? "つづけて どうぞ…" : "きいているよ… ゆっくりで だいじょうぶ！");
+    this.onSession?.(prefix ? "continue" : "listening");
     const options = spec.options.map((id) => PHRASES[id]);
     let hardError = "";
-    this.handle = recognition.listen({
-      onResult: (alts, isFinal) => {
-        if (alts.some((a) => a.trim())) this.sawSpeech = true;
-        const j = judgeSpeech(alts, options);
-        if (j.kind === "match") {
-          this.best = { id: j.id, heard: j.heard };
-          // A matching interim result is accepted at once.
-          this.handle?.abort();
-          this.endSession("");
-          return;
+    this.handle = recognition.listen(
+      {
+        onResult: (raw, isFinal) => {
+          const alts = prefix ? raw.map((a) => `${prefix} ${a}`.trim()) : raw;
+          if (raw.some((a) => a.trim())) this.sawSpeech = true;
+          if (alts[0]?.trim()) this.heard.textContent = `“${alts[0].trim()}…”`;
+          const j = judgeSpeech(alts, options);
+          if (j.kind === "match" && !j.pending) {
+            this.best = { id: j.id, heard: j.heard };
+            this.handle?.abort();
+            this.endSession("");
+            return;
+          }
+          if (j.kind === "match") {
+            // "eight..." — maybe "thirty" is coming. Keep listening a little.
+            this.best = { id: j.id, heard: j.heard, pending: true };
+            this.armQuiet(prefix ? CONTINUE_MS : SETTLE_MS);
+            return;
+          }
+          if (alts[0]) this.wrongHeard = alts[0];
+          if (isFinal) this.armQuiet(this.best?.pending ? SETTLE_MS : ENDPOINT_MS);
+        },
+        onError: (err) => {
+          if (HARD_ERRORS.has(err)) hardError = err;
+        },
+        onEnd: () => this.endSession(hardError),
+        onActivity: (a) => {
+          this.meter.style.width = a.speech ? "100%" : a.sound ? "55%" : a.audio ? "12%" : "0";
         }
-        if (isFinal || alts[0]) this.wrongHeard = alts[0] ?? "";
       },
-      onError: (err) => {
-        if (HARD_ERRORS.has(err)) hardError = err;
-      },
-      onEnd: () => this.endSession(hardError),
-      onActivity: (a) => {
-        this.meter.style.width = a.speech ? "100%" : a.sound ? "55%" : a.audio ? "12%" : "0";
-      }
-    });
+      prefix ? CONTINUE_MS + 4000 : 9000,
+      true
+    );
+    // A continuation that hears nothing more takes what was already said.
+    if (prefix) this.armQuiet(CONTINUE_MS);
   }
 
   private endSession(hardError: string) {
     if (!this.handle && !this.best) return;
+    window.clearTimeout(this.quietTimer);
+    // The browser stopped listening right after "eight...": listen once more and join the two parts.
+    if (this.best?.pending && !this.stoppedByUs && !this.continued && !hardError && this.handle) {
+      this.continued = true;
+      this.handle = null;
+      this.startSession(this.best.heard);
+      return;
+    }
     this.handle = null;
     audio.silence(false);
     this.meter.style.width = "0";
@@ -284,6 +363,7 @@ export class AskPrompt {
     this.misses++;
     this.onSession?.("miss");
     this.heard.textContent = this.wrongHeard ? `I heard: “${this.wrongHeard}”` : "";
+    this.showHint(true);
     audio.hmm();
     if (this.misses === 1) this.setStatus("Almost! Try again!", "おしい！ もういちど！");
     else if (this.misses === 2) {
@@ -316,6 +396,7 @@ export class AskPrompt {
   }
 
   private finish(id?: PhraseId) {
+    window.clearTimeout(this.quietTimer);
     this.handle?.abort();
     this.handle = null;
     audio.silence(false);

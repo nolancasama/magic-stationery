@@ -4,7 +4,14 @@ import type { Stroke } from "../recognition/strokes.ts";
 export interface DrawnStroke {
   points: Stroke;
   color: string;
+  /** Pen width in canvas pixels (absent = the default PEN_WIDTHS.medium). */
+  width?: number;
 }
+
+/** The magic pen's widths (canvas pixels). Medium is the original pen. */
+export const PEN_WIDTHS = { thin: 5, medium: 9, thick: 16, extra: 26 } as const;
+export type PenWidth = keyof typeof PEN_WIDTHS;
+export const DEFAULT_WIDTH = PEN_WIDTHS.medium;
 
 /** A paint-bucket fill: the region around this point, bounded by the lines. */
 export interface DrawnFill {
@@ -105,12 +112,14 @@ export function renderDrawing(d: Drawing, opts: RenderOpts, canvas = document.cr
   const oy = (S - b.h * scale) / 2 - b.minY * scale;
   g.lineCap = "round";
   g.lineJoin = "round";
-  g.lineWidth = opts.lineWidth ?? S * 0.03;
+  const base = opts.lineWidth ?? S * 0.03;
   if (opts.glow) {
     g.shadowColor = opts.glow;
     g.shadowBlur = S * 0.05;
   }
   for (const s of d.strokes) {
+    // The child's chosen pen width, relative to the medium pen.
+    g.lineWidth = base * ((s.width ?? DEFAULT_WIDTH) / DEFAULT_WIDTH);
     g.strokeStyle = opts.color ?? s.color;
     g.beginPath();
     s.points.forEach(([x, y], i) => (i === 0 ? g.moveTo(x * scale + ox, y * scale + oy) : g.lineTo(x * scale + ox, y * scale + oy)));

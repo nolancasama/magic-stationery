@@ -17,7 +17,7 @@ import { audio } from "../../audio/audio.ts";
 import { music } from "../../audio/music.ts";
 import { artFromDrawing, artToDrawing } from "../../draw/art.ts";
 import type { Drawing } from "../../draw/drawing.ts";
-import type { PhraseId } from "../../speech/phrases.ts";
+import { PHRASES, type PhraseId } from "../../speech/phrases.ts";
 import { completionCard, type AlbumItem } from "../../ui/screens.ts";
 import { CLOCK, SEATS, VIEWS } from "../../world/areas/classroom.ts";
 import { animate, ease, wait } from "../../world/tween.ts";
@@ -28,6 +28,21 @@ import type { Game, NpcId } from "../game.ts";
 function seatOf(i: number) {
   const s = SEATS[i];
   return { x: s.x, z: s.z + 0.92 };
+}
+
+/** Seated: on the chair (just in front of its picture, towards the room), facing the board. */
+function chairOf(i: number) {
+  const s = SEATS[i];
+  return { x: s.x, z: s.z + 0.62 };
+}
+
+async function sitDown(g: Game, id: NpcId, i: number) {
+  const c = g.cast[id];
+  const s = chairOf(i);
+  await wait(i * 0.25);
+  await c.go(s.x, s.z);
+  c.faceHeading(Math.PI);
+  c.setBase("sit");
 }
 
 const STUDENTS: NpcId[] = ["ken", "yui", "taro"];
@@ -41,8 +56,9 @@ export async function runSchool(g: Game) {
     STUDENTS.forEach((id, i) => {
       const c = g.cast[id];
       g.inRoom(c);
-      const s = seatOf(i);
+      const s = chairOf(i);
       c.place(s.x, s.z, Math.PI);
+      c.setBase("sit");
     });
     room.setTime(8, 30);
   }
@@ -83,7 +99,12 @@ async function askTime(g: Game, who: NpcId, truth: PhraseId, other: PhraseId, hi
   let tries = 0;
   for (;;) {
     const options: PhraseId[] = tries >= 2 ? [truth] : truth < other ? [truth, other] : [other, truth];
-    const id = await g.ask({ kind: "choice", options, question: { who, en: "What time is it?" }, help: "とけいを みて こたえよう！ みじかい はりは なんじ？" });
+    // After a wrong answer, a tip with the sentence to listen to (often the child just paused).
+    const tip =
+      truth === "itsEightThirty"
+        ? { en: "Try saying “eight thirty” together.", ja: "「エイト・サーティ」を つなげて いってみよう！", say: "Eight thirty. It's eight thirty." }
+        : { en: "Look at the short hand, then say the time.", ja: "みじかい はりを みて、じかんを いおう！", say: PHRASES[truth].en };
+    const id = await g.ask({ kind: "choice", options, question: { who, en: "What time is it?" }, help: "とけいを みて こたえよう！ みじかい はりは なんじ？", hint: tip, hintNow: tries >= 1 });
     if (id === truth) {
       g.player.emote("nod", 0.8);
       return;
@@ -302,6 +323,9 @@ async function stepBell(g: Game) {
   await g.say("mori", "Good morning, everyone!", "みなさん、おはようございます！");
   for (const id of STUDENTS) g.cast[id].emote("wave", 1.4);
   await g.say("ken", "Good morning, **Ms. Mori**!", "おはようございます、もり先生！");
+  // "Sit down, please." — everyone takes their chair.
+  await g.say("mori", "**Sit down**, please.", "すわってください。");
+  await Promise.all(STUDENTS.map((id, i) => sitDown(g, id, i)));
   const before = placeProgress(g.save, "school");
   g.completeStep("bell");
   g.progressed(new THREE.Vector3(0, 1, -1), before);

@@ -15,6 +15,7 @@ import type { Made } from "./made.ts";
 import { buildBook, buildCrayon, buildEraser, buildNotebook, buildPencil, buildRuler, buildSchoolbag, buildScissors } from "./stationery.ts";
 import { SURPRISES, type PlayContext } from "./surprises.ts";
 import { buildChair, buildDesk } from "./furniture.ts";
+import { buildBamboo, buildBanana, buildElephant, buildMonkey, buildPanda, buildPenguin } from "./zoo.ts";
 
 export interface IntroContext {
   effects: Effects;
@@ -33,6 +34,13 @@ async function squash(m: Made, amount = 0.14, dur = 0.16) {
     const s = Math.sin(k * Math.PI) * amount;
     m.inner.scale.set(1 + s, 1 - s, 1 + s);
   });
+}
+
+/** An animal lands, squashes, and makes its sound. */
+async function stomp(m: Made, kind: string) {
+  await dropIn(m, 0.5, 0.6);
+  audio.animal(kind);
+  await squash(m, 0.15);
 }
 
 async function dropIn(m: Made, height: number, dur: number, spin = 0) {
@@ -174,6 +182,20 @@ export const WORD_KINDS: Record<WordId, WordKind> = {
       await dropIn(m, 0.5, 0.6);
       audio.bounce(0.9);
       await squash(m, 0.12);
+    }
+  },
+  elephant: { build: (tint) => buildElephant(tint), tintable: true, intro: (m) => stomp(m, "elephant") },
+  monkey: { build: (tint) => buildMonkey(tint), tintable: true, intro: (m) => stomp(m, "monkey") },
+  panda: { build: (tint) => buildPanda(tint), tintable: true, intro: (m) => stomp(m, "panda") },
+  penguin: { build: (tint) => buildPenguin(tint), tintable: true, intro: (m) => stomp(m, "penguin") },
+  banana: { build: (tint) => buildBanana(tint), tintable: true, intro: (m) => dropIn(m, 0.4, 0.6, Math.PI * 2) },
+  bamboo: {
+    build: (tint) => buildBamboo(tint),
+    tintable: true,
+    async intro(m) {
+      // Shoots up out of the ground.
+      await animate(0.7, (k) => m.inner.scale.set(1, Math.max(0.05, ease.out(k)), 1));
+      audio.sparkle(3, 988);
     }
   },
   chair: {

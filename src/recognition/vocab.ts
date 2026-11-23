@@ -18,7 +18,13 @@ export type WordId =
   | "ruler"
   | "schoolbag"
   | "desk"
-  | "chair";
+  | "chair"
+  | "elephant"
+  | "monkey"
+  | "panda"
+  | "penguin"
+  | "banana"
+  | "bamboo";
 
 export interface Word {
   id: WordId;
@@ -45,7 +51,15 @@ export const WORDS: Record<WordId, Word> = {
   schoolbag: { id: "schoolbag", en: "schoolbag", plural: "schoolbags", article: "a", ja: "ランドセル", accepts: { backpack: 1, basket: 0.3, square: 0.3 } },
   // The dataset has no "desk": a table is a desk; a chair drawn from the side often reads as a table too.
   desk: { id: "desk", en: "desk", plural: "desks", article: "a", ja: "つくえ", accepts: { table: 1, laptop: 0.4, computer: 0.3, square: 0.3, chair: 0.2 } },
-  chair: { id: "chair", en: "chair", plural: "chairs", article: "a", ja: "いす", accepts: { chair: 1, table: 0.35 } }
+  chair: { id: "chair", en: "chair", plural: "chairs", article: "a", ja: "いす", accepts: { chair: 1, table: 0.35 } },
+  // Level 3, the Zoo. Children's animals are often read as a close relative: count those, partly.
+  elephant: { id: "elephant", en: "elephant", plural: "elephants", article: "an", ja: "ぞう", accepts: { elephant: 1, rhinoceros: 0.5, pig: 0.3, mouse: 0.2 } },
+  monkey: { id: "monkey", en: "monkey", plural: "monkeys", article: "a", ja: "さる", accepts: { monkey: 1, bear: 0.35, "teddy-bear": 0.35, mouse: 0.25, cat: 0.2 } },
+  panda: { id: "panda", en: "panda", plural: "pandas", article: "a", ja: "パンダ", accepts: { panda: 1, bear: 0.6, "teddy-bear": 0.5, mouse: 0.2 } },
+  penguin: { id: "penguin", en: "penguin", plural: "penguins", article: "a", ja: "ペンギン", accepts: { penguin: 1, bird: 0.35, duck: 0.35, owl: 0.3 } },
+  banana: { id: "banana", en: "banana", plural: "bananas", article: "a", ja: "バナナ", accepts: { banana: 1, moon: 0.4, carrot: 0.2 } },
+  // Not a Quick, Draw! category: a long thin shape (like the ruler) or what children draw instead.
+  bamboo: { id: "bamboo", en: "bamboo", plural: "bamboo", article: "a", ja: "たけ", accepts: { line: 0.8, "palm tree": 0.4, tree: 0.3, pencil: 0.3, grass: 0.3 }, rule: "longThin" }
 };
 
 /** Model labels that mean "not a real thing yet": plain shapes and scribbles. */
@@ -86,5 +100,5 @@ export function withArticle(label: string): string {
 
 export function wordWithArticle(id: WordId): string {
   const w = WORDS[id];
-  return id === "scissors" ? "scissors" : `${w.article} ${w.en}`;
+  return id === "scissors" || id === "bamboo" ? w.en : `${w.article} ${w.en}`;
 }

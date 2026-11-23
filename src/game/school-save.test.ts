@@ -46,7 +46,7 @@ describe("school save", () => {
     for (const k of ["pencilCup", "erasers", "scissors", "rulers", "crayons", "books", "notebooks", "schoolbags"] as const) s.store.slots[k] = { tints: [null] };
     s.store.steps.push("taro");
     expect(isOpen("school", s)).toBe(true);
-    expect(LEVELS.zoo.run).toBeUndefined();
+    expect(LEVELS.market.run).toBeUndefined();
   });
 });
 

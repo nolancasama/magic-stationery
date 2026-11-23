@@ -31,6 +31,7 @@ import { placeLabel, settingsDialog } from "../ui/screens.ts";
 import { PENNY_SPOT, StoreArea } from "../world/areas/store.ts";
 import type { RoomArea, Slot, Spot, View } from "../world/areas/room.ts";
 import { ClassroomArea } from "../world/areas/classroom.ts";
+import { ZooArea } from "../world/areas/zoo.ts";
 import { TOWN_VIEW, TownArea, type PlaceId } from "../world/areas/town.ts";
 import { GLYPH_POLICY, glyphExample, glyphName, glyphNameJa, glyphScore, judgeGlyph, splitGlyphs, type GlyphVerdict } from "../recognition/glyphs.ts";
 import { Character } from "../world/characters.ts";
@@ -44,6 +45,9 @@ import {
   GLYPH_CHARS,
   SCHOOL_SLOT_KEYS,
   SCHOOL_STEPS,
+  ZOO_SLOT_KEYS,
+  ZOO_STEPS,
+  zooUnits,
   STORE_STEPS,
   SLOT_KEYS,
   load,
@@ -52,15 +56,14 @@ import {
   store as persist,
   type GlyphKey,
   type SaveData,
-  type SchoolStep,
   type SlotSave,
   type Step,
-  type StoreStep
 } from "./save.ts";
 
-export type NpcId = "penny" | "mori" | "ken" | "yui" | "taro";
+export type NpcId = "penny" | "mori" | "oka" | "ken" | "yui" | "taro";
 /** The level rooms (places with a scene of their own). */
-export type RoomPlace = "store" | "school";
+export type RoomPlace = "store" | "school" | "zoo";
+const HOSTS: Record<RoomPlace, NpcId> = { store: "penny", school: "mori", zoo: "oka" };
 
 export interface WriteOutcome {
   /** One drawing per character written (two for "12"). */
@@ -108,14 +111,42 @@ const DISPLAY: Record<WordId, { fit: Fit; upright?: boolean; hinge?: boolean; en
   eraser: { fit: { w: 0.3, h: 0.2 }, entrance: "bounce", tilt: 0 },
   scissors: { fit: { w: 0.32, h: 0.44 }, hinge: true, entrance: "snip", tilt: 0 },
   book: { fit: { w: 0.3, h: 0.4 }, hinge: true, entrance: "book", tilt: -0.16 },
-  notebook: { fit: { w: 0.34, h: 0.38 }, entrance: "flutter", tilt: -0.5 },
+  // Leans back at the notebook board's slope (store NOTEBOOK_SLOPE: pi/2 - 0.95).
+  notebook: { fit: { w: 0.34, h: 0.38 }, entrance: "flutter", tilt: -(Math.PI / 2 - 0.95) },
   schoolbag: { fit: { w: 0.5, h: 0.55 }, entrance: "hop", tilt: 0 },
   desk: { fit: { w: 0.85, h: 0.68 }, entrance: "bounce", tilt: 0 },
+  elephant: { fit: { w: 1.1, h: 0.9 }, entrance: "hop", tilt: 0 },
+  monkey: { fit: { w: 0.6, h: 0.66 }, entrance: "hop", tilt: 0 },
+  panda: { fit: { w: 0.7, h: 0.7 }, entrance: "hop", tilt: 0 },
+  penguin: { fit: { w: 0.4, h: 0.55 }, entrance: "hop", tilt: 0 },
+  banana: { fit: { w: 0.26, h: 0.22 }, entrance: "drop", tilt: 0 },
+  bamboo: { fit: { w: 0.3, h: 1.2 }, upright: true, entrance: "spin", tilt: 0 },
   chair: { fit: { w: 0.5, h: 0.78 }, entrance: "hop", tilt: 0 }
 };
 
+/**
+ * Where the hand grips each held object, as a fraction of its length from its
+ * origin end (models and drawings both stand on their origin, +y up). `flip`
+ * points the origin end forward (the magic pen's tip).
+ */
+const GRIPS: Partial<Record<WordId | "magicPen", { grip: number; flip?: boolean }>> = {
+  pencil: { grip: 0.32 },
+  pen: { grip: 0.32 },
+  crayon: { grip: 0.38 },
+  ruler: { grip: 0.14 },
+  eraser: { grip: 0.5 },
+  scissors: { grip: 0.25 },
+  book: { grip: 0.12 },
+  notebook: { grip: 0.12 },
+  schoolbag: { grip: 0.85 },
+  magicPen: { grip: 0.28, flip: true },
+  banana: { grip: 0.5 },
+  bamboo: { grip: 0.3 }
+};
+
 const WORD_SLOT: Partial<Record<WordId, string>> = {
-  pencil: "pencilCup", eraser: "erasers", scissors: "scissors", ruler: "rulers", crayon: "crayons", book: "books", notebook: "notebooks", schoolbag: "schoolbags", desk: "desks", chair: "chairs"
+  pencil: "pencilCup", eraser: "erasers", scissors: "scissors", ruler: "rulers", crayon: "crayons", book: "books", notebook: "notebooks", schoolbag: "schoolbags", desk: "desks", chair: "chairs",
+  elephant: "elephants", monkey: "monkeys", panda: "pandas", penguin: "penguins", banana: "bananas", bamboo: "bamboo"
 };
 
 export class Game {
@@ -140,6 +171,7 @@ export class Game {
   room: RoomArea = this.store;
   place: RoomPlace = "store";
   private schoolArea: ClassroomArea | null = null;
+  private zooArea: ZooArea | null = null;
   private marker: THREE.Vector3 | null = null;
   private slotWait: { ids: string[]; resolve: (id: string) => void } | null = null;
   private placeWait: { resolve: (id: PlaceId) => void } | null = null;
@@ -185,6 +217,7 @@ export class Game {
     this.cast = {
       penny: new Character(CAST.penny.look),
       mori: new Character(CAST.mori.look),
+      oka: new Character(CAST.oka.look),
       ken: new Character(CAST.ken.look),
       yui: new Character(CAST.yui.look),
       taro: new Character(CAST.taro.look)
@@ -243,33 +276,43 @@ export class Game {
     return (this.schoolArea ??= new ClassroomArea());
   }
 
-  areaOf(place: RoomPlace): RoomArea {
-    return place === "store" ? this.store : this.school;
+  /** The zoo scene is built the first time it is needed. */
+  get zoo(): ZooArea {
+    return (this.zooArea ??= new ZooArea());
   }
 
-  /** The room's host: Ms. Penny in the shop, Ms. Mori in the classroom. */
+  areaOf(place: RoomPlace): RoomArea {
+    return place === "store" ? this.store : place === "school" ? this.school : this.zoo;
+  }
+
+  /** The room's host: Ms. Penny in the shop, Ms. Mori in the classroom, Mr. Oka at the zoo. */
   get host(): Character {
-    return this.place === "store" ? this.cast.penny : this.cast.mori;
+    return this.cast[this.hostId];
   }
 
   get hostId(): NpcId {
-    return this.place === "store" ? "penny" : "mori";
+    return HOSTS[this.place];
+  }
+
+  /** Steps and saved displays of each level room. */
+  private levelSave(place: RoomPlace): { steps: string[]; slots: Partial<Record<string, SlotSave>>; order: readonly string[]; keys: readonly string[] } {
+    if (place === "store") return { steps: this.save.store.steps, slots: this.save.store.slots, order: STORE_STEPS, keys: SLOT_KEYS };
+    if (place === "school") return { steps: this.save.school.steps, slots: this.save.school.slots, order: SCHOOL_STEPS, keys: SCHOOL_SLOT_KEYS };
+    return { steps: this.save.zoo.steps, slots: this.save.zoo.slots, order: ZOO_STEPS, keys: ZOO_SLOT_KEYS };
+  }
+
+  private placeOfStep(step: Step): RoomPlace {
+    return (STORE_STEPS as Step[]).includes(step) ? "store" : (SCHOOL_STEPS as Step[]).includes(step) ? "school" : "zoo";
   }
 
   stepDone(step: Step): boolean {
-    return (STORE_STEPS as Step[]).includes(step) ? this.save.store.steps.includes(step as StoreStep) : this.save.school.steps.includes(step as SchoolStep);
+    return this.levelSave(this.placeOfStep(step)).steps.includes(step);
   }
 
   completeStep(step: Step) {
-    if ((STORE_STEPS as Step[]).includes(step)) {
-      const s = this.save.store.steps;
-      if (!s.includes(step as StoreStep)) s.push(step as StoreStep);
-      s.sort((a, b) => STORE_STEPS.indexOf(a) - STORE_STEPS.indexOf(b));
-    } else {
-      const s = this.save.school.steps;
-      if (!s.includes(step as SchoolStep)) s.push(step as SchoolStep);
-      s.sort((a, b) => SCHOOL_STEPS.indexOf(a) - SCHOOL_STEPS.indexOf(b));
-    }
+    const ls = this.levelSave(this.placeOfStep(step));
+    if (!ls.steps.includes(step)) ls.steps.push(step);
+    ls.steps.sort((a, b) => ls.order.indexOf(a) - ls.order.indexOf(b));
     this.persist();
     this.log("step:" + step);
     if (this.area === this.place) this.updateRoomHud();
@@ -277,15 +320,15 @@ export class Game {
 
   /** Saved displays of a room. */
   slotSaves(place: RoomPlace = this.place): Partial<Record<string, SlotSave>> {
-    return place === "store" ? this.save.store.slots : this.save.school.slots;
+    return this.levelSave(place).slots;
   }
 
   slotKeys(place: RoomPlace = this.place): string[] {
-    return place === "store" ? SLOT_KEYS : SCHOOL_SLOT_KEYS;
+    return [...this.levelSave(place).keys];
   }
 
   slotDone(id: string): boolean {
-    return !!(this.save.store.slots as Record<string, SlotSave | undefined>)[id] || !!(this.save.school.slots as Record<string, SlotSave | undefined>)[id];
+    return (["store", "school", "zoo"] as RoomPlace[]).some((p) => !!this.levelSave(p).slots[id]);
   }
 
   log(e: string) {
@@ -293,9 +336,17 @@ export class Game {
   }
 
   // ------------------------------------------------------------ frame
+  /** In one of the level rooms (shop, classroom, zoo, …) rather than the town or the title. */
+  private get inLevelRoom(): boolean {
+    return this.area !== null && this.area !== "town";
+  }
+
   private update(dt: number, t: number) {
     this.effects.update(dt);
-    if (this.area === "store" || this.area === "school") {
+    this.updateDrive();
+    this.updateGaze(dt);
+    // Every level room, not a list of names: the zoo was missing from such a list and stood frozen.
+    if (this.inLevelRoom) {
       this.room.update(t);
       for (const c of [this.player, ...Object.values(this.cast)]) if (c.root.parent === this.room.scene) c.update(dt);
     } else if (this.area === "town") {
@@ -317,7 +368,103 @@ export class Game {
   }
 
   // ------------------------------------------------------------ input
+  /** Movement keys held (WASD and arrows). */
+  private keys = new Set<"f" | "b" | "l" | "r">();
+
+  /** Free walking is allowed whenever clicking the floor would be. */
+  get canWalk(): boolean {
+    if (!this.area || this.draw.isOpen || this.asker.open) return false;
+    if (this.area === "town") return !!this.placeWait;
+    return !this.scripting || !!this.slotWait;
+  }
+
+  /** Keys -> a direction on the floor, relative to the camera (W = away from the camera). */
+  private updateDrive() {
+    const d = this.player.drive;
+    if (!this.canWalk || !this.keys.size) {
+      d.set(0, 0);
+      return;
+    }
+    const fx = this.engine.camLook.x - this.engine.camPos.x;
+    const fz = this.engine.camLook.z - this.engine.camPos.z;
+    const fl = Math.hypot(fx, fz) || 1;
+    const f = { x: fx / fl, z: fz / fl };
+    const r = { x: -f.z, z: f.x };
+    let x = 0;
+    let z = 0;
+    if (this.keys.has("f")) (x += f.x), (z += f.z);
+    if (this.keys.has("b")) (x -= f.x), (z -= f.z);
+    if (this.keys.has("r")) (x += r.x), (z += r.z);
+    if (this.keys.has("l")) (x -= r.x), (z -= r.z);
+    const len = Math.hypot(x, z);
+    d.set(len ? x / len : 0, len ? z / len : 0);
+  }
+
+  private bindKeys() {
+    const map: Record<string, "f" | "b" | "l" | "r"> = { KeyW: "f", ArrowUp: "f", KeyS: "b", ArrowDown: "b", KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r" };
+    const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    window.addEventListener("keydown", (e) => {
+      const k = map[e.code];
+      if (!k || typing(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!this.canWalk) return;
+      e.preventDefault();
+      if (!this.keys.has(k)) audio.unlock();
+      this.keys.add(k);
+    });
+    window.addEventListener("keyup", (e) => {
+      const k = map[e.code];
+      if (k) this.keys.delete(k);
+    });
+    window.addEventListener("blur", () => this.keys.clear());
+    // People are obstacles for a player steered by keys (routes keep their own planning).
+    this.player.driveCollide = (x, z, r) => {
+      if (this.area === "town") return false;
+      for (const c of Object.values(this.cast)) {
+        if (c.root.parent !== this.room.scene) continue;
+        if (Math.hypot(c.position.x - x, c.position.z - z) < r + c.radius * 0.9) return true;
+      }
+      return false;
+    };
+  }
+
+  /**
+   * Who looks at whom: the person talking (or just spoken to) and the room's
+   * host keep their eyes on the player; anyone close by glances at them; the
+   * player looks at whoever is talking. Bodies turn only when needed (Character).
+   */
+  private updateGaze(dt: number) {
+    const inRoom = this.inLevelRoom;
+    const playerFace = this.player.position.clone().setY(1.0 * (this.player.look.scale ?? 1));
+    let partner: Character | null = null;
+    if (inRoom && this.lastSpeaker && this.lastSpeaker.root.parent === this.room.scene && this.lastSpeakerAt > performance.now() - 15000) partner = this.lastSpeaker;
+    for (const [id, c] of Object.entries(this.cast) as [NpcId, Character][]) {
+      if (!inRoom || c.root.parent !== this.room.scene) {
+        c.lookTarget = null;
+        continue;
+      }
+      const d = Math.hypot(c.position.x - this.player.position.x, c.position.z - this.player.position.z);
+      const isHost = c === this.host;
+      const wandering = this.ambient.has(id);
+      const engaged = c === partner || (isHost && d < 4.5) || (!wandering && d < 2.2) || (wandering && d < 1.5 && !c.moving);
+      c.lookTarget = engaged ? playerFace : null;
+      // The host works facing the shop; shoppers keep their own heading.
+      c.bodyTurn = isHost ? 1.15 : wandering ? Infinity : c === partner ? 0.75 : 1.2;
+      if (isHost && !engaged && !c.moving && !this.scripting) {
+        this.hostIdle += dt;
+        if (this.hostIdle > 1.5) c.faceHeading(this.room.hostSpot.facing);
+      } else if (isHost) this.hostIdle = 0;
+    }
+    const talker = partner && partner !== this.player ? partner : null;
+    this.player.lookTarget = talker && this.scripting ? talker.position.clone().setY(1.0 * (talker.look.scale ?? 1)) : null;
+    this.player.bodyTurn = 1.2;
+  }
+
+  private lastSpeaker: Character | null = null;
+  private lastSpeakerAt = 0;
+  private hostIdle = 0;
+
   private bindInput() {
+    this.bindKeys();
     const canvas = this.engine.canvas;
     canvas.addEventListener("pointerdown", (e) => {
       audio.unlock();
@@ -420,6 +567,7 @@ export class Game {
     };
     add(this.player);
     add(this.host);
+    this.ensurePen();
     this.player.place(room.door.x - 0.6, room.door.z, -Math.PI / 2);
     this.host.place(room.hostSpot.x, room.hostSpot.z, room.hostSpot.facing);
     this.rebuildSlots();
@@ -438,6 +586,7 @@ export class Game {
     this.ambient.clear();
     for (const c of [this.player, ...Object.values(this.cast)]) c.root.removeFromParent();
     this.town.scene.add(this.player.root);
+    this.ensurePen();
     this.player.collide = (x, z, r) => this.town.nav.collides(x, z, r);
     this.player.router = (ax, az, bx, bz) => this.town.nav.route(ax, az, bx, bz);
     if (from) {
@@ -446,9 +595,11 @@ export class Game {
     } else this.player.place(0, 5.2, Math.PI);
     const store = placeProgress(this.save, "store");
     const school = placeProgress(this.save, "school");
+    const zoo = placeProgress(this.save, "zoo");
     this.town.setPlaceLevel("store", 0.08 + 0.92 * store);
     this.town.setPlaceLevel("school", 0.08 + 0.92 * school);
-    this.town.setPlazaLevel(0.1 + 0.18 * store + 0.18 * school);
+    this.town.setPlaceLevel("zoo", 0.08 + 0.92 * zoo);
+    this.town.setPlazaLevel(0.1 + 0.18 * (store + school + zoo));
     this.engine.focus(TOWN_VIEW.pos, TOWN_VIEW.look, true);
     this.engine.setLensShift(0);
     this.hud.setPlace("Magic Town", "まほうの まち", 0, 0);
@@ -461,24 +612,32 @@ export class Game {
       if (id === "store") {
         const done = SLOT_KEYS.filter((k) => this.save.store.slots[k]).length;
         el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">★ ${done} / ${SLOT_KEYS.length}</span>`;
-      } else if (id === "school" && isOpen("school", this.save)) {
-        const u = schoolUnits(this.save);
+      } else if ((id === "school" || id === "zoo") && isOpen(id, this.save)) {
+        const u = id === "school" ? schoolUnits(this.save) : zooUnits(this.save);
         el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">★ ${u.done} / ${u.total}</span>`;
       } else {
         el.classList.add("locked");
-        el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">🔒 ${isBuilt(id) ? "Help the shop first" : "Coming soon"}</span>`;
+        const why = !isBuilt(id) ? "Coming soon" : id === "school" ? "Help the shop first" : "Help the school first";
+        el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">🔒 ${why}</span>`;
       }
       this.labels.set(id, el);
     }
     this.marker = next ? this.town.places[next.place].label.clone().add(new THREE.Vector3(0, 0.9, 0)) : null;
-    music.setLevel(0.1 + 0.2 * store + 0.2 * school);
+    music.setLevel(0.1 + 0.2 * (store + school + zoo));
     music.start();
+  }
+
+  /** Once earned, the magic pen is always in the player's hand (also after a reload). */
+  private ensurePen() {
+    if (!this.stepDone("pen") || this.player.hand.children.length) return;
+    this.holdItem(this.player, "magicPen", buildMagicPen(), 0.75);
   }
 
   /** The next place to restore, if any (the town's objective). */
   nextPlace(): { place: RoomPlace; en: string; ja: string } | null {
     if (placeProgress(this.save, "store") < 1) return { place: "store", en: "Go to the Stationery Store!", ja: "ぶんぼうぐやに いこう！" };
     if (placeProgress(this.save, "school") < 1) return { place: "school", en: "Go to the School!", ja: "がっこうに いこう！" };
+    if (placeProgress(this.save, "zoo") < 1) return { place: "zoo", en: "Go to the Zoo!", ja: "どうぶつえんに いこう！" };
     return null;
   }
 
@@ -501,9 +660,12 @@ export class Game {
     if (this.place === "store") {
       const done = SLOT_KEYS.filter((k) => this.save.store.slots[k]).length;
       this.hud.setPlace("Penny's Stationery", "ぶんぼうぐや", done, SLOT_KEYS.length);
-    } else {
+    } else if (this.place === "school") {
       const u = schoolUnits(this.save);
       this.hud.setPlace("Ms. Mori's Classroom", "もり先生の きょうしつ", u.done, u.total);
+    } else {
+      const u = zooUnits(this.save);
+      this.hud.setPlace("Mr. Oka's Zoo", "おかさんの どうぶつえん", u.done, u.total);
     }
   }
 
@@ -637,16 +799,26 @@ export class Game {
   // ------------------------------------------------------------ talking
   charOf(who: Speaker): Character | null {
     if (who === "player") return this.player;
-    if (who === "penny" || who === "mori" || who === "ken" || who === "yui" || who === "taro") return this.cast[who];
+    if (who === "penny" || who === "mori" || who === "oka" || who === "ken" || who === "yui" || who === "taro") return this.cast[who];
     return null;
   }
 
   async say(who: Speaker, en: string, ja?: string) {
+    const c = this.charOf(who);
+    if (c && c !== this.player) {
+      this.lastSpeaker = c;
+      this.lastSpeakerAt = performance.now();
+    }
     this.engine.setLensShift(0.11);
     await this.dialogue.say(who, en, this.save.settings.japanese ? ja : undefined);
   }
 
   async ask(spec: AskSpec): Promise<PhraseId> {
+    const asker = spec.question ? this.charOf(spec.question.who) : null;
+    if (asker && asker !== this.player) {
+      this.lastSpeaker = asker;
+      this.lastSpeakerAt = performance.now();
+    }
     this.dialogue.hide();
     this.engine.setLensShift(0.12);
     const key = spec.options.join("+");
@@ -1105,16 +1277,27 @@ export class Game {
       if (Math.random() < 0.5) this.effects.twinkle(m.root.position, 0.1);
     });
     this.room.scene.remove(m.root);
-    m.root.position.set(0, 0, 0);
-    m.root.rotation.set(0, 0, 0);
-    m.root.scale.setScalar(0.8 / (c.look.scale ?? 1));
-    c.hand.add(m.root);
+    this.holdItem(c, word, m);
     audio.pop(1.5);
     return m;
   }
 
+  /** Put an object in a character's hand with its own grip (one shared rule for every item). */
+  holdItem(c: Character, word: WordId | "magicPen", m: Made, size = 0.8) {
+    const living = (m as Living).art ? (m as Living) : null;
+    const g = GRIPS[word] ?? { grip: 0.3 };
+    c.hold(m.root, {
+      length: living ? living.h : m.height,
+      grip: g.grip,
+      flip: g.flip,
+      // A flat drawing turns its face a little outwards so both people (and the camera) can see it.
+      turn: living ? 0.7 : 0,
+      scale: size / (c.look.scale ?? 1)
+    });
+  }
+
   dropFromHand(c: Character) {
-    while (c.hand.children.length) c.hand.remove(c.hand.children[0]);
+    c.emptyHand();
   }
 
   async givePen() {
@@ -1137,10 +1320,7 @@ export class Game {
       pen.root.position.y += arc(k) * 0.4;
     });
     this.store.scene.remove(pen.root);
-    pen.root.position.set(0, -0.05, 0.02);
-    pen.root.rotation.set(Math.PI, 0, 0);
-    pen.root.scale.setScalar(0.75);
-    this.player.hand.add(pen.root);
+    this.holdItem(this.player, "magicPen", pen, 0.75);
     this.player.emote("cheer", 1.6);
     audio.sparkle(7);
     this.hud.showPen(true);

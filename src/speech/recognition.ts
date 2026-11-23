@@ -77,8 +77,13 @@ export const recognition = {
     return ctor() !== null;
   },
 
-  /** Start one bounded session. Starting another cancels the previous session. */
-  listen(h: ListenHandlers, maxMs = 7000): ListenHandle {
+  /**
+   * Start one bounded session. Starting another cancels the previous session.
+   * `continuous`: keep listening through pauses (the caller decides when the
+   * child has finished); results always report everything heard so far in the
+   * session, earlier segments joined in front of each alternative of the latest.
+   */
+  listen(h: ListenHandlers, maxMs = 7000, continuous = false): ListenHandle {
     active?.abort();
     const Ctor = ctor();
     let ended = false;
@@ -129,13 +134,20 @@ export const recognition = {
     rec.lang = "en-US";
     rec.interimResults = true;
     rec.maxAlternatives = 8;
-    rec.continuous = false;
+    rec.continuous = continuous;
     rec.onresult = (e) => {
       if (ended) return;
       const res = e.results[e.results.length - 1];
       if (!res) return;
+      // "eight" ... (pause) ... "thirty" arrive as separate results: join them.
+      const before: string[] = [];
+      for (let i = 0; i < e.results.length - 1; i++) {
+        const t = e.results[i]?.[0]?.transcript?.trim();
+        if (t) before.push(t);
+      }
+      const prefix = before.join(" ");
       const alts: string[] = [];
-      for (let k = 0; k < res.length; k++) alts.push(res[k].transcript);
+      for (let k = 0; k < res.length; k++) alts.push(prefix ? `${prefix} ${res[k].transcript.trim()}` : res[k].transcript);
       if (alts.some((text) => text.trim())) updateActivity({ sound: true, speech: true });
       h.onResult(alts, res.isFinal);
     };
