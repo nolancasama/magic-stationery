@@ -9,10 +9,12 @@ New project (2026-11-23). Built directly by Claude at the user's request (no rou
 all five places (four "Coming soon"). Public repo nolancasama/magic-stationery with GitHub Pages
 (Actions workflow), published at the user's request on 2026-11-23.
 
-**The sketch model is being retrained** (the first run's weights were lost: its output folder vanished
-from the session scratchpad before export; `train.py` now creates its folder and checkpoints `best.pt`
-every epoch, output in `.tmp/model-out`). Until `public/models/sketch-model.bin` is committed, the game
-runs without a recogniser: every drawing is accepted (the designed fallback), no live guesses or surprises.
+**Sketch model installed** (`public/models/sketch-model.bin`, 414 KB): int8 test top-1 79.9%, top-3 93.2%,
+top-5 96.0% on 138 classes; the TypeScript pipeline gives top-1 79.5% on 11,040 held-out drawings (parity
+with PyTorch) at ~31 ms per drawing on the desktop. First-try acceptance of genuine drawings: pencil 95%,
+eraser 94%, scissors 96%, book/notebook 100%, crayon 90%, schoolbag 95%, ruler 100%; other things wrongly
+accepted ≤ 1% (ruler 9%, any long thin shape, by design). The first training run was lost at export (see
+DESIGN_DECISIONS); the retrain is deterministic and reproduced it exactly.
 
 ## What Exists
 - `src/recognition/` — sketch pipeline: `strokes.ts` + `raster.ts` (shared with training), `model.ts`

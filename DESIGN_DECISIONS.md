@@ -115,3 +115,14 @@ Ported from monster-island (`speech/recognition.ts`, `tts.ts`, matcher rules):
 - Restoration (8 displays) drives: the colour level, wall lamps, the window, the flowers on the plant, the
   sign, and the music layers (music box → bass → melody → percussion).
 - Helped customers come back as shoppers who browse the displays and pay at the counter.
+
+## 2026-11-23 — Published before the model was ready; training runs are protected
+
+- The user asked to publish to GitHub Pages while the model was retraining. The first live build ships
+  **without** a model file rather than with an untrained placeholder: the game's no-model fallback accepts
+  every drawing at once, while a near-random model would reject each drawing twice before the help
+  ladder accepted it. `model.test.ts` skips when the model is absent so CI can deploy.
+- The first training run (79.9% top-1 / 93.2% top-3 int8 on 138 classes) was lost at export: its
+  output folder disappeared from the session scratchpad and the weights were only in memory. `train.py`
+  now creates its own output folder, checkpoints `best.pt` after every improving epoch, and can export
+  from a checkpoint alone (`epochs = 0`); outputs go to the git-ignored `.tmp/model-out` in the project.
