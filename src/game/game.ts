@@ -15,7 +15,7 @@ import { copyFrom, flySketch, materialize, poof } from "../objects/transform.ts"
 import { judge, liveGuess, type Verdict } from "../recognition/policy.ts";
 import type { Recognizer } from "../recognition/recognizer.ts";
 import { exampleFor } from "../recognition/examples.ts";
-import { WORDS, labelWord, withArticle, wordWithArticle, type WordId } from "../recognition/vocab.ts";
+import { WORDS, withArticle, wordWithArticle, type WordId } from "../recognition/vocab.ts";
 import { simplifyLikeQuickDraw } from "../recognition/strokes.ts";
 import type { PhraseId } from "../speech/phrases.ts";
 import { tts } from "../speech/tts.ts";
@@ -325,7 +325,8 @@ export class Game {
     this.engine.focus(TOWN_VIEW.pos, TOWN_VIEW.look, true);
     this.engine.setLensShift(0);
     this.hud.setPlace("Magic Town", "まほうの まち", 0, 0);
-    this.hud.setObjective("Go to the Stationery Store!", "ぶんぼうぐやに いこう！");
+    if (level < 1) this.hud.setObjective("Go to the Stationery Store!", "ぶんぼうぐやに いこう！");
+    else this.hud.setObjective(null);
     this.hud.showPen(this.stepDone("pen"));
     for (const id of Object.keys(this.town.places) as PlaceId[]) {
       const p = this.town.places[id];
@@ -339,7 +340,7 @@ export class Game {
       }
       this.labels.set(id, el);
     }
-    this.marker = this.town.places.store.label.clone().add(new THREE.Vector3(0, 0.9, 0));
+    this.marker = level < 1 ? this.town.places.store.label.clone().add(new THREE.Vector3(0, 0.9, 0)) : null;
     music.setLevel(0.1 + 0.2 * level);
     music.start();
   }
@@ -391,18 +392,48 @@ export class Game {
     this.engine.focus(view.pos, view.look, snap);
   }
 
-  /** A three-quarter shot of two characters talking. */
+  /**
+   * Conversation framing: over the player's shoulder towards the other
+   * person's face (monster-island's three-quarter shot). Candidate positions
+   * are tried in order of preference; the first with a clear line of sight to
+   * both faces (no walls or furniture in between) wins.
+   */
   talkView(a: Character, b: Character): View {
     const pa = a.position;
     const pb = b.position;
-    const mid = pa.clone().lerp(pb, 0.5);
-    const dir = new THREE.Vector3().subVectors(pb, pa).setY(0).normalize();
+    const dir = new THREE.Vector3().subVectors(pb, pa).setY(0);
+    if (dir.lengthSq() < 1e-4) dir.set(1, 0, 0);
+    dir.normalize();
     const side = new THREE.Vector3(dir.z, 0, -dir.x);
-    if (side.z < 0) side.negate();
-    const pos = mid.clone().addScaledVector(side, 3.4).addScaledVector(dir, -0.6);
-    pos.y = 2.5;
-    pos.z = Math.min(pos.z, 5.5);
-    return { pos, look: mid.clone().setY(1.0) };
+    // Prefer the side towards the open (cut-away) front of the diorama.
+    const firstSide = side.z >= 0 ? 1 : -1;
+    const look = pb.clone().lerp(pa, 0.35).setY(1.05);
+    const heads = [pa.clone().setY(1.1), pb.clone().setY(1.15)];
+    const ray = this.engine.raycaster;
+    const clear = (from: THREE.Vector3) =>
+      heads.every((hd) => {
+        const to = hd.clone().sub(from);
+        const len = to.length();
+        ray.set(from, to.normalize());
+        ray.far = len;
+        const hit = ray.intersectObjects(this.store.solids, false)[0];
+        ray.far = Infinity;
+        return !hit || hit.distance > len - 0.3;
+      });
+    for (const back of [1.3, 1.9, 0.6]) {
+      for (const off of [2.4, 1.7, 3.0]) {
+        for (const s of [firstSide, -firstSide]) {
+          for (const hgt of [2.2, 2.9]) {
+            const c = pa.clone().addScaledVector(dir, -back).addScaledVector(side, s * off);
+            c.y = hgt;
+            c.x = Math.max(-4.2, Math.min(4.2, c.x));
+            c.z = Math.max(-2.7, Math.min(6, c.z));
+            if (clear(c)) return { pos: c, look };
+          }
+        }
+      }
+    }
+    return { pos: VIEWS.overview.pos.clone(), look };
   }
 
   setMarker(p: THREE.Vector3 | null) {
@@ -594,14 +625,13 @@ export class Game {
     await flySketch(this.engine, this.store.scene, this.effects, drawing, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, size: rect.height * 0.8 }, spot.clone().setY(0.4), 0.5);
     await materialize(this.store.scene, this.effects, thing.made, spot, Math.atan2(this.engine.camPos.x - spot.x, this.engine.camPos.z - spot.z));
     audio.animal(label);
-    const name = labelWord(label);
     this.hud.say(`${capital(withArticle(label))}!`, "", 2400);
     // Play on the open floor near the spot, so it stays in the picture and off the furniture.
     const roam = { minX: Math.max(-3.4, spot.x - 1.6), maxX: Math.min(ROOM.maxX - 0.5, spot.x + 1.6), minZ: Math.max(0.95, spot.z - 0.6), maxZ: Math.min(ROOM.maxZ - 0.3, spot.z + 1.3) };
     const play = thing.play({ effects: this.effects, roam, camera: this.engine.camPos });
     this.cast.penny.emote("laugh", 2.2);
     this.player.emote("surprised", 1.4);
-    await Promise.all([play, this.dialogue.announce("penny", `${capital(withArticle(label))}! Ha ha! But it's not ${wordWithArticle(word)}.`, this.save.settings.japanese ? `${name}だ！ でも ${WORDS[word].ja}じゃないね。` : undefined)]);
+    await Promise.all([play, this.dialogue.announce("penny", `${capital(withArticle(label))}! Ha ha! But it's not ${wordWithArticle(word)}.`, this.save.settings.japanese ? `わあ、おもしろい！ でも ${WORDS[word].ja}じゃないね。` : undefined)]);
     await poof(this.store.scene, this.effects, thing.made);
     this.dialogue.hide();
   }
@@ -689,10 +719,15 @@ export class Game {
     c.collide = (px, pz, r) => this.store.nav.collides(px, pz, r);
     c.router = (ax, az, bx, bz) => this.store.nav.route(ax, az, bx, bz);
     c.place(DOOR.outsideX, DOOR.z, -Math.PI / 2);
+    // The doorway is outside the walkable room: no collision until they are inside.
+    c.collide = null;
+    c.router = null;
     this.focus(VIEWS.door);
     audio.door();
     await animate(0.4, (k) => this.store.setDoor(ease.out(k)));
     await c.walkTo(DOOR.x - 0.7, DOOR.z);
+    c.collide = (px, pz, r) => this.store.nav.collides(px, pz, r);
+    c.router = (ax, az, bx, bz) => this.store.nav.route(ax, az, bx, bz);
     void animate(0.5, (k) => this.store.setDoor(1 - ease.inOut(k)));
     await c.go(x, z);
   }
@@ -703,6 +738,8 @@ export class Game {
     await c.go(DOOR.x - 0.7, DOOR.z);
     audio.door();
     await animate(0.3, (k) => this.store.setDoor(ease.out(k)));
+    c.collide = null;
+    c.router = null;
     await c.walkTo(DOOR.outsideX, DOOR.z);
     this.store.scene.remove(c.root);
     void animate(0.4, (k) => this.store.setDoor(1 - k));
@@ -793,6 +830,14 @@ export class Game {
         continue;
       }
       n = (n + 1 + Math.floor(Math.random() * 3)) % spots.length;
+      // Keep clear of the player and of anyone taking part in a scene.
+      const busy = [this.player, ...Object.entries(this.cast).filter(([k, c]) => !this.ambient.has(k as NpcId) && c.root.parent === this.store.scene).map(([, c]) => c)];
+      const near = (x: number, z: number) => busy.some((c) => Math.hypot(c.position.x - x, c.position.z - z) < 2.0);
+      for (let tries = 0; tries < spots.length && near(spots[n][0], spots[n][1]); tries++) n = (n + 1) % spots.length;
+      if (near(spots[n][0], spots[n][1])) {
+        await wait(1.2);
+        continue;
+      }
       const [x, z, slot] = spots[n];
       const ok = await c.go(x + (Math.random() - 0.5) * 0.4, z + (Math.random() - 0.5) * 0.3);
       if (!ok || !this.ambient.has(id)) return;

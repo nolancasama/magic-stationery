@@ -22,6 +22,7 @@ await page.goto(base + "?e2e=1&speed=" + (process.env.SPEED ?? "2"));
 await page.click("[data-test=start]");
 const shots = { surprise: false, hint: false, crayonWrong: false, taroBag: false };
 let drawnRabbit = false;
+const seenQ = new Set();
 let crayonTries = 0;
 const t0 = Date.now();
 while (Date.now() - t0 < 900_000) {
@@ -43,6 +44,11 @@ while (Date.now() - t0 < 900_000) {
     if (/schoolbag/.test(q) && !shots.taroBag) {
       await page.waitForTimeout(500);
       await shot("taro-asks");
+    }
+    if (!seenQ.has(q) && seenQ.size < 8) {
+      seenQ.add(q);
+      await page.waitForTimeout(900);
+      await shot("ask-" + q.replace(/[^a-z]+/gi, "-").slice(0, 24));
     }
     let text = cards[0].replace("🔊", "").trim();
     if (cards.length > 1) text = /pencil|eraser|notebook/i.test(q) && !/ruler|crayons|schoolbag/i.test(q) ? "yes I do" : "no I don't";
@@ -101,7 +107,7 @@ while (Date.now() - t0 < 900_000) {
     continue;
   }
   const next = page.locator(".dialogue:not(.hidden) [data-test=next]:not(.ghost)");
-  if (await next.isVisible()) await next.click();
+  if (await next.isVisible()) await next.click({ timeout: 2000 }).catch(() => {});
   else await page.waitForTimeout(150);
 }
 await page.waitForTimeout(2500);
@@ -114,7 +120,7 @@ for (let i = 0; i < 3; i++) {
   const next = page.locator(".dialogue:not(.hidden) [data-test=next]:not(.ghost)");
   if (await next.isVisible()) {
     await shot("town-after-" + i);
-    await next.click();
+    await next.click({ timeout: 2000 }).catch(() => {});
   }
   await page.waitForTimeout(1500);
 }

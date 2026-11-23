@@ -115,8 +115,7 @@ export class DrawPanel {
     const side = h(
       "div",
       { class: "draw-side" },
-      tool("↶", "Undo", "もどす", "draw-undo", () => this.undo()),
-      tool("🗑️", "Clear", "けす", "draw-clear", () => this.clear()),
+      h("div", { class: "tool-row" }, tool("↶", "Undo", "もどす", "draw-undo", () => this.undo()), tool("🗑️", "Clear", "けす", "draw-clear", () => this.clear())),
       tool("💡", "Hint", "ヒント", "draw-hint", () => this.hint()),
       this.padBtn,
       this.example,

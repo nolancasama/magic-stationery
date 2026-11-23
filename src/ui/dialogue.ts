@@ -97,6 +97,8 @@ export class Dialogue {
       return;
     }
     await nextPress(this.next, [" ", "Enter"]);
+    // The line stays as context until the next one, but its Next is spent.
+    this.next.classList.add("ghost");
     audio.click();
     tts.cancel();
   }

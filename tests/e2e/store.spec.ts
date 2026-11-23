@@ -76,7 +76,7 @@ async function step(page: Page, opts: { surpriseFirst?: boolean; seen: Set<strin
     return;
   }
   if (await next.isVisible()) {
-    await next.click();
+    await next.click({ timeout: 2000 }).catch(() => {});
     return;
   }
   await page.waitForTimeout(120);
@@ -103,7 +103,7 @@ async function start(page: Page, query = "") {
     const s = await state(page);
     if (s.waiting === "place") break;
     const next = page.locator(".dialogue:not(.hidden) [data-test=next]:not(.ghost)");
-    if (await next.isVisible()) await next.click();
+    if (await next.isVisible()) await next.click({ timeout: 2000 }).catch(() => {});
     else await page.waitForTimeout(100);
   }
   expect(await page.evaluate(() => window.__ms.clickPlace())).toBe(true);
@@ -133,8 +133,14 @@ test("the whole level works with the microphone switched off (tap mode)", async 
   await page.goto("/?e2e=1");
   await page.evaluate(() => localStorage.setItem("ms.save.v1", JSON.stringify({ v: 1, started: false, store: { steps: [], slots: {} }, settings: { mic: false, help: "normal", japanese: true, slowVoice: false, music: true, sfx: true, touchpadPen: false } })));
   const errors = await start(page);
-  // First prompt: "Do you have a pen?" must be tapped among distractors.
-  await expect.poll(async () => (await state(page)).waiting, { timeout: 60000 }).toBe("ask");
+  // Click through Ms. Penny's first lines to the first prompt: "Do you have a pen?" among distractors.
+  const tStart = Date.now();
+  while ((await state(page)).waiting !== "ask") {
+    if (Date.now() - tStart > 90000) throw new Error("no prompt: " + JSON.stringify(await state(page)));
+    const next = page.locator(".dialogue:not(.hidden) [data-test=next]:not(.ghost)");
+    if (await next.isVisible()) await next.click({ timeout: 2000 }).catch(() => {});
+    else await page.waitForTimeout(100);
+  }
   const cards = page.locator(".ask .say-card.tappable");
   await expect(cards).toHaveCount(3);
   await page.locator(".ask .say-card.tappable", { hasText: "Do you like pens?" }).click();
@@ -144,7 +150,7 @@ test("the whole level works with the microphone switched off (tap mode)", async 
   while (!(await state(page)).steps.includes("pen")) {
     if (Date.now() - t0 > 60000) throw new Error("pen step did not finish");
     const next = page.locator(".dialogue:not(.hidden) [data-test=next]:not(.ghost)");
-    if (await next.isVisible()) await next.click();
+    if (await next.isVisible()) await next.click({ timeout: 2000 }).catch(() => {});
     else await page.waitForTimeout(100);
   }
   // Yes/no questions are tappable too, and the truth still matters.

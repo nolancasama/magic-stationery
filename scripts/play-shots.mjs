@@ -47,7 +47,7 @@ while (Date.now() - t0 < 120000) {
   const next = page.locator(".dialogue:not(.hidden) [data-test=next]:not(.ghost)");
   if (await next.isVisible()) {
     if (shotDialogue < 3 && shots.has("counter")) { await shot("dialogue"); shotDialogue++; }
-    await next.click();
+    await next.click({ timeout: 2000 }).catch(() => {});
   } else await page.waitForTimeout(120);
 }
 await page.waitForTimeout(2500);

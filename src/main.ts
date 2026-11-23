@@ -91,7 +91,8 @@ async function boot() {
   });
 
   for (;;) {
-    game.objective("Go to the Stationery Store!", "ぶんぼうぐやに いこう！", game.town.places.store.label.clone().setY(5.4));
+    if (storeProgress(game.save) < 1) game.objective("Go to the Stationery Store!", "ぶんぼうぐやに いこう！", game.town.places.store.label.clone().setY(5.4));
+    else game.objective(null);
     await game.waitPlace();
     game.setMarker(null);
     const door = game.town.places.store.door;

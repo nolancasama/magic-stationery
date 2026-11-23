@@ -1,5 +1,7 @@
 # Magic Stationery: Restore the World
 
+**Play: https://nolancasama.github.io/magic-stationery/** (Chrome / Chromebook; allow the microphone)
+
 A browser 3D English adventure for Japanese grade 4 (MEXT *Let's Try! 2*). The world has been erased.
 Ms. Penny lends you a magic pen: draw the missing things, and they come to life.
 
@@ -20,7 +22,7 @@ Supermarket and Gym are designed (`SPEC.md`) and shown as "Coming soon".
 
 ```sh
 npm install
-npm run dev        # http://127.0.0.1:5181
+npm run dev        # http://localhost:5181
 npm run build      # static site in dist/ (relative paths: any folder or GitHub Pages)
 npm test           # unit tests (run from PowerShell on Windows; Git Bash breaks vitest here)
 npm run e2e        # Playwright: plays Level 1 end to end at 1366x768

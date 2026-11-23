@@ -24,7 +24,7 @@ export interface Place {
 
 const BOUNDS: Rect = { minX: -10.5, maxX: 10.5, minZ: -8.5, maxZ: 7.5 };
 
-export const TOWN_VIEW = { pos: new THREE.Vector3(0, 15.5, 19.5), look: new THREE.Vector3(0, 0.2, -2.4) };
+export const TOWN_VIEW = { pos: new THREE.Vector3(0, 15.5, 19.5), look: new THREE.Vector3(0, 1.3, -2.4) };
 
 interface PlaceSpec {
   id: PlaceId;

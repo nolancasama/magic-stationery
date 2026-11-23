@@ -35,12 +35,21 @@ DESIGN_DECISIONS); the retrain is deterministic and reproduced it exactly.
   completion album).
 
 ## Current Work
-Verification in progress (see Next Steps).
+Verified 2026-11-23: tsc, 44 unit tests (incl. TS-vs-PyTorch parity), both e2e tests (Level 1 by speech with
+the rabbit surprise + reload; mic-off tap mode), full-playthrough screenshot pass at 1366x768 judged by
+Claude (`scripts/full-shots.mjs`). Peak 101 draw calls (restored shop + 3 shoppers). Live:
+https://nolancasama.github.io/magic-stationery/
+
+Fixed after the screenshot pass: customers froze outside the door (collision outside the room); conversation
+camera now over the player's shoulder with a line-of-sight check; ambient shoppers keep clear of scenes;
+crayon palette pushed out of the draw panel by the hint card; spent Next button now hides; town labels
+under the objective bar.
 
 ## Known Issues
-- Drawing usability on a real Chromebook touchpad has not been tried (only mouse/touch simulation).
-- Speech recognition has only been exercised through the test hook, not a real microphone.
+- Drawing usability on a real Chromebook touchpad has not been tried (mouse/touch simulation only).
+- Speech recognition only exercised through the test hook, not a real microphone.
+- Inference ~31 ms/drawing on the desktop; untested on a slow Chromebook (live guesses run only in pauses).
 
 ## Next Steps
-1. The user plays Level 1 on a Chromebook (`npm run dev`, or a build in any folder).
+1. The user plays Level 1 on a Chromebook and reports feel (drawing, speech, pacing).
 2. Level 2 (Classroom): digit/letter recogniser, clock, alphabet strip, desks/chairs (SPEC.md §5).

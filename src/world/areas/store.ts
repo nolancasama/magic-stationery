@@ -73,6 +73,8 @@ export class StoreArea {
   private windowGlass: THREE.Mesh;
   private windowMat: THREE.MeshBasicMaterial;
   private level = 0;
+  /** Walls and furniture (for camera line-of-sight checks). */
+  readonly solids: THREE.Object3D[] = [];
 
   constructor() {
     this.scene.background = new THREE.Color("#2d2645");
@@ -126,7 +128,13 @@ export class StoreArea {
     for (let i = 0; i < 5; i++) p.box(0.2, 0.027, 1.2, i % 2 ? "#9575cd" : "#d1c4e9", { p: [-0.4 + i * 0.5, 0.034, 1.95] });
     const mesh = p.mesh(worldMat);
     this.scene.add(mesh);
+    this.solids.push(mesh);
     return mesh;
+  }
+
+  private solid(m: THREE.Object3D) {
+    this.scene.add(m);
+    this.solids.push(m);
   }
 
   private buildCounter() {
@@ -149,7 +157,7 @@ export class StoreArea {
     p.box(0.28, 0.24, 0.02, "#66bb6a", { p: [-2.28, 1.1, -0.88] });
     p.box(0.02, 0.24, 0.16, "#66bb6a", { p: [-2.42, 1.1, -0.8] });
     p.box(0.02, 0.24, 0.16, "#66bb6a", { p: [-2.14, 1.1, -0.8] });
-    this.scene.add(p.mesh(worldMat));
+    this.solid(p.mesh(worldMat));
   }
 
   private buildPegboard() {
@@ -163,7 +171,7 @@ export class StoreArea {
       p.cyl(0.012, 0.012, 0.14, "#9e9e9e", { p: [x, 2.5, -2.88], r: [Math.PI / 2, 0, 0] }, 6);
       p.sphere(0.02, "#9e9e9e", { p: [x, 2.5, -2.81] }, 6, 4);
     }
-    this.scene.add(p.mesh(worldMat));
+    this.solid(p.mesh(worldMat));
     const label = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.24), worldBasicMaterial({ map: signTexture("ERASERS · SCISSORS", { bg: "#fff3d6", fg: "#6d4c41" }), transparent: true }));
     label.position.set(-3.0, 2.95, -2.93);
     this.scene.add(label);
@@ -179,7 +187,7 @@ export class StoreArea {
     }
     p.box(2.9, 0.06, 0.5, "#6d4c41", { p: [0.1, 2.2, -2.7] });
     p.box(2.8, 0.3, 0.45, "#8d6e63", { p: [0.1, 0.2, -2.7] });
-    this.scene.add(p.mesh(worldMat));
+    this.solid(p.mesh(worldMat));
     const label = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.24), worldBasicMaterial({ map: signTexture("BOOKS", { bg: "#fff3d6", fg: "#6d4c41" }), transparent: true }));
     label.position.set(0.1, 2.45, -2.85);
     this.scene.add(label);
@@ -202,7 +210,7 @@ export class StoreArea {
     // A small bench below the bags.
     p.box(2.4, 0.08, 0.5, "#a1887f", { p: [3.1, 0.45, -2.7] });
     for (const x of [2.0, 4.2]) p.box(0.08, 0.45, 0.45, "#8d6e63", { p: [x, 0.225, -2.7] });
-    this.scene.add(p.mesh(worldMat));
+    this.solid(p.mesh(worldMat));
     const label = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.24), worldBasicMaterial({ map: signTexture("SCHOOLBAGS", { bg: "#fff3d6", fg: "#6d4c41" }), transparent: true }));
     label.position.set(3.1, 2.75, -2.93);
     this.scene.add(label);
@@ -221,7 +229,7 @@ export class StoreArea {
     // Notebook stand: a slanted board.
     p.box(1.3, 0.04, 0.5, "#90a4ae", { p: [2.5, 0.95, 0.3], r: [-0.95, 0, 0] });
     p.box(1.3, 0.06, 0.04, "#78909c", { p: [2.5, 0.78, 0.5] });
-    this.scene.add(p.mesh(worldMat));
+    this.solid(p.mesh(worldMat));
     const label = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.15), worldBasicMaterial({ map: signTexture("CRAYONS", { bg: "#ffffff", fg: "#e53935" }), transparent: true }));
     label.position.set(0.9, 0.9, 0.44);
     this.scene.add(label);
@@ -237,7 +245,7 @@ export class StoreArea {
     frame.box(0.24, 0.12, 1.6, "#8d6e63", { p: [4.6, 2.52, 1.7] });
     frame.sphere(0.07, "#f4c542", { p: [4.44, 2.36, 1.7] }, 10, 8);
     frame.cone(0.09, 0.12, "#f4c542", { p: [4.44, 2.3, 1.7] }, 10);
-    this.scene.add(frame.mesh(worldMat));
+    this.solid(frame.mesh(worldMat));
     const door = new THREE.Group();
     door.position.set(4.6, 0, 2.4);
     const d = new Parts();
