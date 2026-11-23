@@ -6,8 +6,16 @@ export interface DrawnStroke {
   color: string;
 }
 
+/** A paint-bucket fill: the region around this point, bounded by the lines. */
+export interface DrawnFill {
+  x: number;
+  y: number;
+  color: string;
+}
+
 export interface Drawing {
   strokes: DrawnStroke[];
+  fills?: DrawnFill[];
 }
 
 export interface Crayon {

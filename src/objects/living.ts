@@ -63,7 +63,7 @@ export function fitSize(art: Art, fit: Fit): { w: number; h: number } {
 }
 
 /** The artwork as a living object. Root sits at the drawing's bottom centre. */
-export function buildLiving(art: Art, fit: Fit, opts: { shadow?: boolean; glow?: boolean; label?: string } = {}): Living {
+export function buildLiving(art: Art, fit: Fit, opts: { shadow?: boolean; glow?: boolean; label?: string; hinge?: boolean } = {}): Living {
   const { w, h } = fitSize(art, fit);
   const fx: LivingFx = {
     uWave: { value: 0 },
@@ -102,9 +102,26 @@ export function buildLiving(art: Art, fit: Fit, opts: { shadow?: boolean; glow?:
   };
   mat.customProgramCacheKey = () => "ms-living";
   const m = made(opts.label ?? "drawing", h, null) as Living;
-  const sprite = new THREE.Mesh(geo, mat);
-  m.inner.add(sprite);
-  m.parts.sprite = sprite;
+  if (opts.hinge) {
+    // Two halves of the same picture, hinged at the middle: the child's own
+    // scissors can open and snip, their own book can open and close.
+    geo.dispose();
+    for (const side of [-1, 1]) {
+      const half = new THREE.PlaneGeometry(w / 2, h, 6, 8);
+      half.translate((side * w) / 4, h / 2, 0);
+      const uv = half.getAttribute("uv") as THREE.BufferAttribute;
+      for (let i = 0; i < uv.count; i++) uv.setX(i, side < 0 ? uv.getX(i) * 0.5 : 0.5 + uv.getX(i) * 0.5);
+      const pivot = new THREE.Group();
+      pivot.add(new THREE.Mesh(half, mat));
+      m.inner.add(pivot);
+      m.parts[side < 0 ? "left" : "right"] = pivot;
+    }
+    m.parts.sprite = m.parts.left;
+  } else {
+    const sprite = new THREE.Mesh(geo, mat);
+    m.inner.add(sprite);
+    m.parts.sprite = sprite;
+  }
   if (opts.glow) {
     const g = renderArt(art, 256, { glowOnly: "#ffd54f" });
     const gt = new THREE.CanvasTexture(g.canvas);
@@ -248,8 +265,27 @@ export const ENTRANCES: Record<string, (m: Living) => Promise<void>> = {
     await squash(m, 0.1);
   },
   bounce: (m) => hopIn(m, [0.45, 0.2, 0.08]),
-  // Scissors snip: quick squeezes.
+  // Scissors snip: the two halves of the child's drawing open and close around the middle.
   snip: async (m) => {
+    const L = m.parts.left;
+    const R = m.parts.right;
+    if (L && R) {
+      const pivotY = m.h * 0.5;
+      for (const p of [L, R]) {
+        p.position.y = pivotY;
+        p.children[0].position.y = -pivotY;
+      }
+      for (let i = 0; i < 3; i++) {
+        audio.snip();
+        await animate(0.3, (k) => {
+          const open = Math.sin(k * Math.PI) * 0.4;
+          L.rotation.z = open;
+          R.rotation.z = -open;
+        });
+      }
+      L.rotation.z = R.rotation.z = 0;
+      return;
+    }
     for (let i = 0; i < 3; i++) {
       audio.snip();
       await animate(0.24, (k) => {
@@ -271,6 +307,20 @@ export const ENTRANCES: Record<string, (m: Living) => Promise<void>> = {
   // A book opens and closes (its width folds and unfolds like covers).
   book: async (m) => {
     audio.flap();
+    const L = m.parts.left;
+    const R = m.parts.right;
+    if (L && R) {
+      // The two halves are the covers: they close towards the middle and open again, twice.
+      await animate(1.4, (k) => {
+        const shut = Math.abs(Math.sin(k * Math.PI * 2)) * 1.35;
+        L.rotation.y = shut;
+        R.rotation.y = -shut;
+        m.inner.position.y = arc(k) * 0.3;
+      });
+      L.rotation.y = R.rotation.y = 0;
+      audio.bounce(1.4);
+      return;
+    }
     await animate(1.1, (k) => {
       m.inner.scale.x = 0.15 + 0.85 * Math.abs(Math.cos(k * Math.PI * 2));
       m.inner.position.y = arc(k) * 0.35;

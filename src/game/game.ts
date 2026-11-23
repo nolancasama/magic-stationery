@@ -70,14 +70,14 @@ const COPY_TINTS: Partial<Record<WordId, (string | null)[]>> = {
 };
 
 /** How the child's drawing is shown in each display (drawing mode). */
-const DISPLAY: Record<WordId, { fit: Fit; upright?: boolean; entrance: keyof typeof ENTRANCES; tilt: number }> = {
+const DISPLAY: Record<WordId, { fit: Fit; upright?: boolean; hinge?: boolean; entrance: keyof typeof ENTRANCES; tilt: number }> = {
   pencil: { fit: { w: 0.16, h: 0.5 }, upright: true, entrance: "spin", tilt: 0 },
   pen: { fit: { w: 0.16, h: 0.5 }, upright: true, entrance: "spin", tilt: 0 },
   crayon: { fit: { w: 0.12, h: 0.34 }, upright: true, entrance: "drop", tilt: -0.18 },
   ruler: { fit: { w: 0.16, h: 0.66 }, upright: true, entrance: "spin", tilt: 0 },
   eraser: { fit: { w: 0.3, h: 0.2 }, entrance: "bounce", tilt: 0 },
-  scissors: { fit: { w: 0.32, h: 0.44 }, entrance: "snip", tilt: 0 },
-  book: { fit: { w: 0.3, h: 0.4 }, entrance: "book", tilt: -0.16 },
+  scissors: { fit: { w: 0.32, h: 0.44 }, hinge: true, entrance: "snip", tilt: 0 },
+  book: { fit: { w: 0.3, h: 0.4 }, hinge: true, entrance: "book", tilt: -0.16 },
   notebook: { fit: { w: 0.34, h: 0.38 }, entrance: "flutter", tilt: -0.5 },
   schoolbag: { fit: { w: 0.5, h: 0.55 }, entrance: "hop", tilt: 0 }
 };
@@ -423,7 +423,7 @@ export class Game {
   makeItem(word: WordId, index: number, art: Art | null, tint: string | null, glow = false): Made {
     if (this.drawingMode && art) {
       const cfg = DISPLAY[word];
-      return buildLiving(cfg.upright ? uprightArt(art) : art, cfg.fit, { glow, label: word });
+      return buildLiving(cfg.upright ? uprightArt(art) : art, cfg.fit, { glow, label: word, hinge: cfg.hinge });
     }
     return WORD_KINDS[word].build(tint ? new THREE.Color(tint) : null, index);
   }

@@ -160,6 +160,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .paper-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .paper-wrap .paper-lines { position: absolute; inset: 0; background-image: linear-gradient(#f3ead8 1px, transparent 1px); background-size: 100% 36px; opacity: .8; pointer-events: none; }
 .paper-wrap.pen-cursor canvas.ink { cursor: crosshair; }
+.paper-wrap.fill-cursor canvas.ink { cursor: cell; }
 .pen-bubble {
   position: absolute; left: 14px; top: 12px; max-width: 70%; padding: 8px 14px; border-radius: 16px; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.15);
   font-size: 20px; font-weight: 800; pointer-events: none; display: flex; align-items: center; gap: 8px; transition: transform .2s;

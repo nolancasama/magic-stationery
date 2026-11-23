@@ -149,3 +149,19 @@ Ported from monster-island (`speech/recognition.ts`, `tts.ts`, matcher rules):
 - **Measured:** fully restored shop in drawing mode 109 draw calls (models mode 99) at 1366×768 SwiftShader.
 - **Rejected:** image-to-3D generation (too heavy for Chromebooks); a white sticker border/fill around drawings
   (it changed the child's style; the old "living doodle" did this).
+
+## 2026-11-24 — Filled drawings, colouring in, and mechanics on the child's own objects (user questions)
+
+- **Auto-fill (user preference over transparent):** closed areas the child leaves empty get a soft tint of
+  their own main line colour (`fill.ts` `softTint`, 60% towards white); outside the drawing stays
+  transparent. Lines are thickened 1.8× in the fill mask so small gaps still close; fills tuck under the
+  lines (`growIntoLines`) so no gap shows. Recognition ignores fills (strokes only).
+- **Colouring in:** a 🎨 Fill tool (paint bucket) in the draw panel: tap inside a closed shape to fill it
+  with the selected crayon. Saved as seed points (`fills`), so it survives crops, upright rotation, saves
+  and reloads, and Undo steps strokes and fills in order. Taps outside the drawing are refused ("Tap
+  inside a closed shape!") — fills never paint a background. The child's fills win over the auto-fill.
+- **Mechanics on player art:** `buildLiving({ hinge: true })` splits the drawing into two halves sharing one
+  texture, hinged at the middle. Scissors: the halves swing open and shut (snip); book: the halves fold
+  like covers. Fish wiggle, bird flap, ball roll and the rest remain whole-drawing motion + shader
+  deformation. No body-part detection.
+- Icon: 🎨 rather than 🪣 (U+1FAA3 renders as an empty box on some systems).

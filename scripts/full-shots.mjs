@@ -102,8 +102,11 @@ while (Date.now() - t0 < 900_000) {
     const key = word === "schoolbag" ? "backpack" : word;
     if (FIX[key]) await draw(key);
     else await page.evaluate((w) => window.__ms.drawExample(w), word);
-    await page.waitForTimeout(1300);
-    await shot("transform-" + word);
+    // Capture the flight and the entrance (scissors snip, book opens).
+    for (const [i, ms] of [[0, 1300], [1, 1400], [2, 500]]) {
+      await page.waitForTimeout(ms);
+      await shot("transform-" + word + "-" + i);
+    }
     continue;
   }
   const next = page.locator(".dialogue:not(.hidden) [data-test=next]:not(.ghost)");

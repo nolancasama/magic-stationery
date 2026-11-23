@@ -7,7 +7,8 @@
  * click again to lift it - for children who cannot hold the button and move.
  */
 import { audio } from "../audio/audio.ts";
-import { CRAYONS, INK, renderDrawing, type Crayon, type Drawing, type DrawnStroke } from "../draw/drawing.ts";
+import { CRAYONS, INK, renderDrawing, type Crayon, type Drawing, type DrawnFill, type DrawnStroke } from "../draw/drawing.ts";
+import { floodRegion, growIntoLines } from "../draw/fill.ts";
 import type { Point } from "../recognition/strokes.ts";
 import { tts } from "../speech/tts.ts";
 import { PEN_VOICE } from "../game/cast.ts";
@@ -69,6 +70,11 @@ export class DrawPanel {
   private colorName: HTMLDivElement;
   private pop: HTMLDivElement;
   private strokes: DrawnStroke[] = [];
+  /** Paint-bucket fills (colouring in), and the order of strokes/fills for Undo. */
+  private fills: DrawnFill[] = [];
+  private actions: ("s" | "f")[] = [];
+  private fillMode = false;
+  private fillBtn!: HTMLButtonElement;
   private current: DrawnStroke | null = null;
   private color: Crayon = INK;
   private spec: DrawSpec | null = null;
@@ -116,7 +122,7 @@ export class DrawPanel {
       "div",
       { class: "draw-side" },
       h("div", { class: "tool-row" }, tool("↶", "Undo", "もどす", "draw-undo", () => this.undo()), tool("🗑️", "Clear", "けす", "draw-clear", () => this.clear())),
-      tool("💡", "Hint", "ヒント", "draw-hint", () => this.hint()),
+      h("div", { class: "tool-row" }, tool("💡", "Hint", "ヒント", "draw-hint", () => this.hint()), (this.fillBtn = tool("🎨", "Fill", "ぬる", "draw-fill", () => this.setFillMode(!this.fillMode), "toggle"))),
       this.padBtn,
       this.example,
       this.finishBtn
@@ -154,6 +160,9 @@ export class DrawPanel {
   open(spec: DrawSpec) {
     this.spec = spec;
     this.strokes = [];
+    this.fills = [];
+    this.actions = [];
+    this.setFillMode(false);
     this.current = null;
     this.penDown = false;
     this.lastGuessText = "";
@@ -201,7 +210,9 @@ export class DrawPanel {
   }
 
   get drawing(): Drawing {
-    return { strokes: this.strokes.map((s) => ({ color: s.color, points: s.points.slice() })) };
+    const d: Drawing = { strokes: this.strokes.map((s) => ({ color: s.color, points: s.points.slice() })) };
+    if (this.fills.length) d.fills = this.fills.map((f) => ({ ...f }));
+    return d;
   }
 
   private fit() {
@@ -226,6 +237,7 @@ export class DrawPanel {
     const start = (p: Point) => {
       this.current = { color: this.color.hex, points: [p] };
       this.strokes.push(this.current);
+      this.actions.push("s");
       this.dot(p);
       this.lastMove = { x: p[0], y: p[1], t: performance.now() };
     };
@@ -243,6 +255,10 @@ export class DrawPanel {
       if (this.current && !this.padMode && e.pointerId !== this.pointerId) return;
       this.pointerId = e.pointerId;
       const p = this.pos(e);
+      if (this.fillMode) {
+        this.tryFill(p);
+        return;
+      }
       if (this.padMode) {
         this.penDown = !this.penDown;
         if (this.penDown) start(p);
@@ -320,9 +336,89 @@ export class DrawPanel {
     g.fill();
   }
 
+  /** The line mask at canvas (CSS px) size; lines thickened so small gaps still close. */
+  private lineMask(W: number, H: number): Uint8Array {
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const g = c.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    g.lineWidth = LINE * 1.8;
+    g.strokeStyle = "#000";
+    g.fillStyle = "#000";
+    for (const s of this.strokes) {
+      g.beginPath();
+      if (s.points.length === 1) {
+        g.arc(s.points[0][0], s.points[0][1], LINE, 0, Math.PI * 2);
+        g.fill();
+        continue;
+      }
+      s.points.forEach(([x, y], i) => (i === 0 ? g.moveTo(x, y) : g.lineTo(x, y)));
+      g.stroke();
+    }
+    const px = g.getImageData(0, 0, W, H).data;
+    const line = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) line[i] = px[i * 4 + 3] > 40 ? 1 : 0;
+    return line;
+  }
+
+  private canvasSize(): { W: number; H: number } {
+    return { W: Math.max(1, Math.round(this.ink.width / this.dpr)), H: Math.max(1, Math.round(this.ink.height / this.dpr)) };
+  }
+
+  private setFillMode(on: boolean) {
+    this.fillMode = on;
+    this.fillBtn.classList.toggle("on", on);
+    this.wrap.classList.toggle("fill-cursor", on);
+    if (on) this.setBubble("Tap inside a shape to colour it!", "かたちの なかを タップして ぬろう！");
+  }
+
+  /** Paint bucket: colour the area around this point, if it is inside the drawing. */
+  private tryFill(p: Point) {
+    const { W, H } = this.canvasSize();
+    const region = floodRegion(this.lineMask(W, H), W, H, p[0], p[1]);
+    if (!region) {
+      this.feedback("Tap inside a closed shape!", "とじた かたちの なかを タップしてね！");
+      return;
+    }
+    this.fills.push({ x: Math.round(p[0]), y: Math.round(p[1]), color: this.color.hex });
+    this.actions.push("f");
+    audio.pop(1.6);
+    this.redraw();
+  }
+
+  /** Fills under the lines (recomputed from their seed points, so Undo stays exact). */
+  private drawFills(g: CanvasRenderingContext2D) {
+    if (!this.fills.length) return;
+    const { W, H } = this.canvasSize();
+    const line = this.lineMask(W, H);
+    const off = document.createElement("canvas");
+    off.width = W;
+    off.height = H;
+    const og = off.getContext("2d") as CanvasRenderingContext2D;
+    const img = og.createImageData(W, H);
+    for (const f of this.fills) {
+      const r = floodRegion(line, W, H, f.x, f.y);
+      if (!r) continue;
+      const grown = growIntoLines(r, line, W, H, Math.ceil(LINE * 0.6));
+      const n = parseInt(f.color.slice(1), 16);
+      for (let i = 0; i < W * H; i++) {
+        if (!grown[i]) continue;
+        img.data[i * 4] = (n >> 16) & 255;
+        img.data[i * 4 + 1] = (n >> 8) & 255;
+        img.data[i * 4 + 2] = n & 255;
+        img.data[i * 4 + 3] = 255;
+      }
+    }
+    og.putImageData(img, 0, 0);
+    g.drawImage(off, 0, 0, W, H);
+  }
+
   private redraw() {
     const g = this.ctx();
     g.clearRect(0, 0, this.ink.width, this.ink.height);
+    this.drawFills(g);
     for (const s of this.strokes) {
       g.strokeStyle = s.color;
       g.fillStyle = s.color;
@@ -355,7 +451,9 @@ export class DrawPanel {
   }
 
   private undo() {
-    this.strokes.pop();
+    const last = this.actions.pop();
+    if (last === "f") this.fills.pop();
+    else this.strokes.pop();
     this.current = null;
     this.penDown = false;
     this.updatePadHint();
@@ -365,6 +463,8 @@ export class DrawPanel {
 
   private clear() {
     this.strokes = [];
+    this.fills = [];
+    this.actions = [];
     this.current = null;
     this.penDown = false;
     this.updatePadHint();
@@ -472,6 +572,8 @@ export class DrawPanel {
   /** Test hook: replace the drawing with these strokes (canvas pixels). */
   inject(d: Drawing) {
     this.strokes = d.strokes.map((s) => ({ color: s.color, points: s.points.slice() }));
+    this.fills = (d.fills ?? []).map((f) => ({ ...f }));
+    this.actions = [...this.strokes.map(() => "s" as const), ...this.fills.map(() => "f" as const)];
     this.redraw();
     this.scheduleGuess(10, true);
   }

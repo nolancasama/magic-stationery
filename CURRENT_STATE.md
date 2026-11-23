@@ -39,17 +39,10 @@ DESIGN_DECISIONS); the retrain is deterministic and reproduced it exactly.
 (`draw/art.ts`, `objects/living.ts`, `game/config.ts`; `?models=1` restores the kept premade models).
 Verified then: tsc, 48 unit tests, both e2e tests, living-shots + full-playthrough screenshots.
 
-**In progress, NOT committed (user requests 2026-11-24):**
-1. Auto-fill + colouring in: `draw/fill.ts` (flood/interior/grow, DOM-free), `art.ts` now stores the child's
-   paint-bucket fills (`fills` seeds) and `renderArt` paints their fills, then a soft tint of their line colour
-   in closed areas they left empty, then their lines. Draw panel has a 🪣 Fill toggle (row with Hint); fills
-   are refused outside closed shapes; Undo steps strokes/fills in order (`actions`).
-2. Hinged halves for player art: `buildLiving({ hinge: true })` splits the drawing into left/right halves
-   (`parts.left/right`); `ENTRANCES.snip` opens/closes the halves (scissors), `ENTRANCES.book` swings them
-   like covers.
-   **Still to do:** pass `hinge: true` for scissors and book in `game.ts` `DISPLAY`/`makeItem`; typecheck; unit
-   tests for `fill.ts` and art fills; e2e; screenshot check of auto-fill, Fill tool, snipping scissors; record
-   in DESIGN_DECISIONS; commit + push (Pages redeploys).
+**Also committed + live (2026-11-24):** auto-fill of closed areas, the 🎨 Fill tool (colouring in), hinged
+halves so the child's scissors snip and book opens (`draw/fill.ts`, `art.ts` fills, `drawPanel.ts`,
+`living.ts` hinge). Verified: tsc, 54 unit tests, both e2e tests, screenshots judged by Claude
+(`scripts/living-shots.mjs`, `fill-shots.mjs`, `full-shots.mjs`).
 
 ## Known Issues
 - Drawing mode: 109 draw calls in the fully restored shop (budget ~100). Merge static display items if a Chromebook struggles.
