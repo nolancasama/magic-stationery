@@ -12,6 +12,9 @@ import { buildMagicPen } from "../objects/stationery.ts";
 import type { Made } from "../objects/made.ts";
 import { WORD_KINDS, buildSurprise } from "../objects/registry.ts";
 import { copyFrom, flySketch, materialize, poof } from "../objects/transform.ts";
+import { ENTRANCES, behaviourOf, bringToLife, buildLiving, fitFor, play as playLiving, type Fit, type Living } from "../objects/living.ts";
+import { artFromDrawing, uprightArt, type Art } from "../draw/art.ts";
+import { artMode } from "./config.ts";
 import { judge, liveGuess, type Verdict } from "../recognition/policy.ts";
 import type { Recognizer } from "../recognition/recognizer.ts";
 import { exampleFor } from "../recognition/examples.ts";
@@ -66,6 +69,23 @@ const COPY_TINTS: Partial<Record<WordId, (string | null)[]>> = {
   schoolbag: ["#263238", "#6d4c41"]
 };
 
+/** How the child's drawing is shown in each display (drawing mode). */
+const DISPLAY: Record<WordId, { fit: Fit; upright?: boolean; entrance: keyof typeof ENTRANCES; tilt: number }> = {
+  pencil: { fit: { w: 0.16, h: 0.5 }, upright: true, entrance: "spin", tilt: 0 },
+  pen: { fit: { w: 0.16, h: 0.5 }, upright: true, entrance: "spin", tilt: 0 },
+  crayon: { fit: { w: 0.12, h: 0.34 }, upright: true, entrance: "drop", tilt: -0.18 },
+  ruler: { fit: { w: 0.16, h: 0.66 }, upright: true, entrance: "spin", tilt: 0 },
+  eraser: { fit: { w: 0.3, h: 0.2 }, entrance: "bounce", tilt: 0 },
+  scissors: { fit: { w: 0.32, h: 0.44 }, entrance: "snip", tilt: 0 },
+  book: { fit: { w: 0.3, h: 0.4 }, entrance: "book", tilt: -0.16 },
+  notebook: { fit: { w: 0.34, h: 0.38 }, entrance: "flutter", tilt: -0.5 },
+  schoolbag: { fit: { w: 0.5, h: 0.55 }, entrance: "hop", tilt: 0 }
+};
+
+const WORD_SLOT: Partial<Record<WordId, SlotId>> = {
+  pencil: "pencilCup", eraser: "erasers", scissors: "scissors", ruler: "rulers", crayon: "crayons", book: "books", notebook: "notebooks", schoolbag: "schoolbags"
+};
+
 export class Game {
   readonly engine: Engine;
   readonly effects = new Effects();
@@ -93,6 +113,9 @@ export class Game {
   /** Lines and asks seen this session (first meeting of a phrase is modelled aloud). */
   private modelled = new Set<string>();
   readonly events: string[] = [];
+  /** The child's artwork per display: arts, and which art each place shows. */
+  readonly slotArt: Partial<Record<SlotId, { arts: Art[]; src: number[] }>> = {};
+  readonly drawingMode = artMode() === "drawing";
 
   constructor(container: HTMLElement) {
     this.storage = (() => {
@@ -373,18 +396,56 @@ export class Game {
       slot.ghosts.forEach((g) => (g.visible = true));
       const saved = this.save.store.slots[id];
       if (!saved) continue;
+      const arts = saved.arts?.length ? saved.arts : [this.legacyArt(slot.word, saved.drawing)];
+      const src = saved.src ?? saved.tints.map(() => 0);
+      this.slotArt[id] = { arts, src: src.slice() };
       saved.tints.forEach((tint, i) => {
         const a = slot.anchors[i];
         if (!a) return;
-        const m = WORD_KINDS[slot.word].build(tint ? new THREE.Color(tint) : null, i);
-        m.root.position.copy(a.p);
-        m.root.rotation.copy(a.r);
-        m.root.scale.setScalar(a.s ?? 1);
+        const m = this.makeItem(slot.word, i, arts[src[i] ?? 0] ?? arts[0], tint);
+        this.placeItem(slot, i, m);
         this.store.scene.add(m.root);
         slot.items.push(m);
         slot.ghosts[i].visible = false;
       });
     }
+  }
+
+  /** Artwork for saves made before drawings were kept (their lines, in magic ink). */
+  private legacyArt(word: WordId, drawing?: number[][][]): Art {
+    const d = drawing?.length
+      ? { strokes: drawing.map((st) => ({ color: INK.hex, points: st.map(([x, y]) => [x, y] as [number, number]) })) }
+      : exampleFor(word) ?? { strokes: [{ color: INK.hex, points: [[0, 0], [10, 10]] as [number, number][] }] };
+    return artFromDrawing(d, 9);
+  }
+
+  /** A display object: the child's living drawing, or (models mode) the premade model. */
+  makeItem(word: WordId, index: number, art: Art | null, tint: string | null, glow = false): Made {
+    if (this.drawingMode && art) {
+      const cfg = DISPLAY[word];
+      return buildLiving(cfg.upright ? uprightArt(art) : art, cfg.fit, { glow, label: word });
+    }
+    return WORD_KINDS[word].build(tint ? new THREE.Color(tint) : null, index);
+  }
+
+  /** Put an item at a display place (drawings stand facing the room). */
+  private placeItem(slot: Slot, i: number, m: Made) {
+    const a = slot.anchors[i];
+    if ((m as Living).art) {
+      m.root.position.copy(a.p).add(new THREE.Vector3(0, 0, i * 0.012));
+      m.root.rotation.set(DISPLAY[slot.word].tilt, 0, a.r.z);
+      m.root.scale.setScalar(1);
+    } else {
+      m.root.position.copy(a.p);
+      m.root.rotation.copy(a.r);
+      m.root.scale.setScalar(a.s ?? 1);
+    }
+  }
+
+  /** The first artwork drawn for a word (for gifts), if any. */
+  artFor(word: WordId): Art | null {
+    const id = WORD_SLOT[word];
+    return (id && this.slotArt[id]?.arts[0]) || null;
   }
 
   // ------------------------------------------------------------ camera
@@ -613,8 +674,6 @@ export class Game {
 
   /** The wrong thing appears and plays, people react, then it goes puff. */
   private async surprise(label: string, drawing: Drawing, rect: DOMRect, near: Slot, word: WordId) {
-    const crayon = dominantCrayon(drawing);
-    const thing = buildSurprise(label, crayon ? new THREE.Color(crayon.hex) : null, drawing);
     const spot = new THREE.Vector3(Math.max(-3.2, Math.min(3.8, near.stand.x + 0.9)), 0, Math.max(1.2, Math.min(ROOM.maxZ - 0.8, near.stand.z + 0.5)));
     if (this.store.nav.collides(spot.x, spot.z, 0.3)) {
       const [fx, fz] = this.store.nav.nearestFree(spot.x, spot.z);
@@ -622,17 +681,32 @@ export class Game {
     }
     // Frame the spot where it appears, with room to play around it.
     this.focus({ pos: new THREE.Vector3(spot.x + 0.6, 2.6, Math.min(spot.z + 3.8, 6.2)), look: new THREE.Vector3(spot.x, 0.55, spot.z - 0.2) });
-    await flySketch(this.engine, this.store.scene, this.effects, drawing, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, size: rect.height * 0.8 }, spot.clone().setY(0.4), 0.5);
-    await materialize(this.store.scene, this.effects, thing.made, spot, Math.atan2(this.engine.camPos.x - spot.x, this.engine.camPos.z - spot.z));
-    audio.animal(label);
-    this.hud.say(`${capital(withArticle(label))}!`, "", 2400);
-    // Play on the open floor near the spot, so it stays in the picture and off the furniture.
     const roam = { minX: Math.max(-3.4, spot.x - 1.6), maxX: Math.min(ROOM.maxX - 0.5, spot.x + 1.6), minZ: Math.max(0.95, spot.z - 0.6), maxZ: Math.min(ROOM.maxZ - 0.3, spot.z + 1.3) };
-    const play = thing.play({ effects: this.effects, roam, camera: this.engine.camPos });
+    let made: Made;
+    let play: Promise<void>;
+    if (this.drawingMode) {
+      // Their own drawing comes to life and behaves like what it is.
+      const b = behaviourOf(label);
+      const m = buildLiving(artFromDrawing(drawing), fitFor(b), { shadow: true, glow: true, label });
+      const yaw = Math.atan2(this.engine.goalPos.x - spot.x, this.engine.goalPos.z - spot.z);
+      await bringToLife(this.engine, this.store.scene, this.effects, m, screenBox(drawing, rect), spot, new THREE.Euler(0, yaw, 0));
+      made = m;
+      audio.animal(label);
+      play = playLiving(m, b, { effects: this.effects, roam, camera: this.engine.camPos });
+    } else {
+      const crayon = dominantCrayon(drawing);
+      const thing = buildSurprise(label, crayon ? new THREE.Color(crayon.hex) : null, drawing);
+      await flySketch(this.engine, this.store.scene, this.effects, drawing, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, size: rect.height * 0.8 }, spot.clone().setY(0.4), 0.5);
+      await materialize(this.store.scene, this.effects, thing.made, spot, Math.atan2(this.engine.camPos.x - spot.x, this.engine.camPos.z - spot.z));
+      made = thing.made;
+      audio.animal(label);
+      play = thing.play({ effects: this.effects, roam, camera: this.engine.camPos });
+    }
+    this.hud.say(`${capital(withArticle(label))}!`, "", 2400);
     this.cast.penny.emote("laugh", 2.2);
     this.player.emote("surprised", 1.4);
     await Promise.all([play, this.dialogue.announce("penny", `${capital(withArticle(label))}! Ha ha! But it's not ${wordWithArticle(word)}.`, this.save.settings.japanese ? `わあ、おもしろい！ でも ${WORDS[word].ja}じゃないね。` : undefined)]);
-    await poof(this.store.scene, this.effects, thing.made);
+    await poof(this.store.scene, this.effects, made);
     this.dialogue.hide();
   }
 
@@ -646,16 +720,29 @@ export class Game {
     const kind = WORD_KINDS[slot.word];
     const index = opts.anchor ?? 0;
     const a = slot.anchors[index];
-    // A crayon drawn in magic ink is an ink-coloured crayon; other things keep their natural colours.
+    // Models mode: a crayon drawn in magic ink is an ink-coloured crayon; other things keep natural colours.
     const tint = kind.tintable && out.crayon ? out.crayon.hex : slot.word === "crayon" ? INK.hex : null;
-    const m = kind.build(tint ? new THREE.Color(tint) : null, index);
-    m.root.scale.setScalar(a.s ?? 1);
+    const art = artFromDrawing(out.drawing);
+    const rec = (this.slotArt[id] ??= { arts: [], src: [] });
+    rec.arts.push(art);
+    rec.src[index] = rec.arts.length - 1;
     slot.ghosts[index].visible = false;
     this.focus(slot.view);
-    const r = out.rect;
-    await flySketch(this.engine, this.store.scene, this.effects, out.drawing, { x: r.left + r.width / 2, y: r.top + r.height / 2, size: r.height * 0.8 }, a.p.clone().add(new THREE.Vector3(0, m.height * 0.6, 0)), Math.max(0.35, m.height * 1.2));
-    await materialize(this.store.scene, this.effects, m, a.p, a.r);
-    await kind.intro(m, { effects: this.effects });
+    const m = this.makeItem(slot.word, index, art, tint, true);
+    if (this.drawingMode) {
+      // The drawing itself lifts off the page and flies to its place.
+      this.placeItem(slot, index, m);
+      const at = m.root.position.clone();
+      const rot = m.root.rotation.clone();
+      await bringToLife(this.engine, this.store.scene, this.effects, m as Living, screenBox(out.drawing, out.rect), at, rot);
+      await ENTRANCES[DISPLAY[slot.word].entrance](m as Living);
+    } else {
+      m.root.scale.setScalar(a.s ?? 1);
+      const r = out.rect;
+      await flySketch(this.engine, this.store.scene, this.effects, out.drawing, { x: r.left + r.width / 2, y: r.top + r.height / 2, size: r.height * 0.8 }, a.p.clone().add(new THREE.Vector3(0, m.height * 0.6, 0)), Math.max(0.35, m.height * 1.2));
+      await materialize(this.store.scene, this.effects, m, a.p, a.r);
+      await kind.intro(m, { effects: this.effects });
+    }
     slot.items[index] = m;
     this.log("restored:" + id + ":" + index);
     if (opts.fill !== false) await this.fillSlot(id, index, opts.tints);
@@ -663,22 +750,27 @@ export class Game {
     return m;
   }
 
-  /** The magic copies the first object into the rest of the display. */
+  /** The magic copies the drawing(s) into the rest of the display. */
   async fillSlot(id: SlotId, from: number, tints?: (string | null)[]) {
     const slot = this.store.slots[id];
-    const kind = WORD_KINDS[slot.word];
     const base = slot.anchors[from].p.clone();
+    const rec = (this.slotArt[id] ??= { arts: [], src: [] });
     const jobs: Promise<void>[] = [];
     let k = 0;
     for (let i = 0; i < slot.anchors.length; i++) {
       if (slot.items[i]) continue;
       const tint = tints?.[i] ?? COPY_TINTS[slot.word]?.[k % (COPY_TINTS[slot.word]?.length ?? 1)] ?? null;
-      const m = kind.build(tint ? new THREE.Color(tint) : null, i);
+      // Copies are the child's own drawings again (taking turns if there are several).
+      const srcIndex = rec.arts.length ? k % rec.arts.length : 0;
+      rec.src[i] = srcIndex;
+      const m = this.makeItem(slot.word, i, rec.arts[srcIndex] ?? null, tint);
       slot.ghosts[i].visible = false;
       slot.items[i] = m;
-      const a = slot.anchors[i];
-      m.root.scale.setScalar(a.s ?? 1);
-      jobs.push(wait(0.18 * k).then(() => copyFrom(this.store.scene, this.effects, base, m, a.p, a.r)));
+      this.placeItem(slot, i, m);
+      const at = m.root.position.clone();
+      const rot = m.root.rotation.clone();
+      const scale = m.root.scale.x;
+      jobs.push(wait(0.18 * k).then(() => copyFrom(this.store.scene, this.effects, base, m, at, rot)).then(() => void m.root.scale.setScalar(scale)));
       k++;
     }
     await Promise.all(jobs);
@@ -688,8 +780,9 @@ export class Game {
     const slot = this.store.slots[id];
     const tints = slot.items.map((m) => (m?.tint ? "#" + m.tint.getHexString() : null));
     const simplified = drawing ? simplifyLikeQuickDraw(strokesOf(drawing)).map((s) => s.map(([x, y]) => [x, y])) : undefined;
+    const rec = this.slotArt[id];
     const before = storeProgress(this.save);
-    this.save.store.slots[id] = { tints, drawing: simplified };
+    this.save.store.slots[id] = { tints, drawing: simplified, arts: rec?.arts.slice(), src: rec ? slot.items.map((_, i) => rec.src[i] ?? 0) : undefined };
     this.persist();
     const after = storeProgress(this.save);
     void this.colourWave(slot.anchors[0].p, 0.1 + 0.9 * before, 0.1 + 0.9 * after);
@@ -747,7 +840,7 @@ export class Game {
 
   /** Fly an object (a new copy of a word kind) into a character's hand. */
   async giveTo(c: Character, word: WordId, fromPos: THREE.Vector3, tint: string | null = null): Promise<Made> {
-    const m = WORD_KINDS[word].build(tint ? new THREE.Color(tint) : null, 1);
+    const m = this.makeItem(word, 1, this.artFor(word), tint);
     m.root.position.copy(fromPos);
     this.store.scene.add(m.root);
     const to = new THREE.Vector3();
@@ -855,9 +948,30 @@ export class Game {
     }
   }
 
+  /**
+   * Debug / future invention phase: any drawing comes to life on the shop floor
+   * as itself, behaving like whatever it was recognised as. Stays in the world.
+   */
+  async debugSpawn(d: Drawing, at: { x: number; z: number }, seconds = 6): Promise<{ label: string; behaviour: string; w: number; h: number }> {
+    const label = this.recognizer?.recognize(strokesOf(d)).ranked[0].label ?? "drawing";
+    const b = behaviourOf(label);
+    const m = buildLiving(artFromDrawing(d), fitFor(b), { shadow: true, glow: true, label });
+    const spot = new THREE.Vector3(at.x, 0, at.z);
+    const yaw = Math.atan2(this.engine.goalPos.x - spot.x, this.engine.goalPos.z - spot.z);
+    const box = { x: window.innerWidth / 2 - 120, y: window.innerHeight / 2 - 120, w: 240, h: 240 };
+    await bringToLife(this.engine, this.store.scene, this.effects, m, box, spot, new THREE.Euler(0, yaw, 0));
+    const roam = { minX: spot.x - 1.6, maxX: spot.x + 1.6, minZ: Math.max(0.6, spot.z - 0.8), maxZ: Math.min(ROOM.maxZ - 0.3, spot.z + 1.0) };
+    void playLiving(m, b, { effects: this.effects, roam, camera: this.engine.camPos, seconds });
+    return { label, behaviour: b, w: m.w, h: m.h };
+  }
+
   /** Debug: every slot restored with natural colours, all customers shopping. */
   async debugFill() {
-    for (const id of SLOT_KEYS) this.save.store.slots[id] = { tints: this.store.slots[id].anchors.map(() => null) };
+    for (const id of SLOT_KEYS) {
+      const ex = exampleFor(this.store.slots[id].word);
+      const arts = ex ? [artFromDrawing(ex)] : [];
+      this.save.store.slots[id] = { tints: this.store.slots[id].anchors.map(() => null), arts, src: this.store.slots[id].anchors.map(() => 0) };
+    }
     this.rebuildSlots();
     this.setStoreLevel(this.storeLevel(), true);
     this.updateStoreHud();
@@ -876,6 +990,20 @@ export class Game {
   stats() {
     return this.engine.stats();
   }
+}
+
+/** The drawing's own box on screen (canvas rect + its ink bounds). */
+export function screenBox(d: Drawing, rect: DOMRect) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const st of d.strokes)
+    for (const [x, y] of st.points) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  if (minX === Infinity) return { x: rect.left, y: rect.top, w: rect.width, h: rect.height };
+  return { x: rect.left + minX, y: rect.top + minY, w: Math.max(10, maxX - minX), h: Math.max(10, maxY - minY) };
 }
 
 export function capital(s: string): string {

@@ -149,6 +149,11 @@ function exposeHooks(game: Game) {
       game.draw.pressFinish();
     },
     recognize: (d: Drawing) => game.recognizer?.recognize(d.strokes.map((s) => s.points)).ranked.slice(0, 5),
+    /** Bring any drawing (0-255 space, scaled like the canvas) to life on the floor. */
+    spawn: (d: Drawing, x: number, z: number, seconds = 6) => {
+      const scale = 1.6;
+      return game.debugSpawn({ strokes: d.strokes.map((s) => ({ color: s.color, points: s.points.map(([px, py]) => [px * scale, py * scale] as [number, number]) })) }, { x, z }, seconds);
+    },
     wait
   };
   (window as unknown as { __ms: typeof api }).__ms = api;

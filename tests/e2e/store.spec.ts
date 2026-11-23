@@ -127,6 +127,17 @@ test("Level 1 can be completed by speaking, with a funny surprise on the way", a
   await page.waitForSelector("[data-test=continue]");
   const after = await state(page);
   expect(after.steps.length).toBe(7);
+  // The player's own drawings were saved, and the shop is rebuilt from them (not from premade models).
+  await page.click("[data-test=continue]");
+  const shown = await page.evaluate(() => {
+    const g = (window.__ms as unknown as { game: { save: { store: { slots: Record<string, { arts?: unknown[] }> } }; enterStore(): void; store: { slots: Record<string, { items: { art?: unknown }[] }> } } }).game;
+    g.enterStore();
+    return Object.entries(g.store.slots).map(([id, s]) => ({ id, saved: g.save.store.slots[id]?.arts?.length ?? 0, items: s.items.length, drawings: s.items.filter((m) => m.art).length }));
+  });
+  for (const s of shown) {
+    expect(s.saved, s.id).toBeGreaterThan(0);
+    expect(s.drawings, s.id).toBe(s.items);
+  }
 });
 
 test("the whole level works with the microphone switched off (tap mode)", async ({ page }) => {

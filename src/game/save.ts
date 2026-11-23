@@ -3,6 +3,8 @@
  * a damaged or foreign save never crashes the game, it falls back to defaults).
  */
 
+import { sanitizeArt, type Art } from "../draw/art.ts";
+
 export type StoreStep = "pen" | "pencils" | "shelf" | "ken" | "crayons" | "books" | "taro";
 export const STORE_STEPS: StoreStep[] = ["pen", "pencils", "shelf", "ken", "crayons", "books", "taro"];
 
@@ -12,8 +14,12 @@ export const SLOT_KEYS: SlotKey[] = ["pencilCup", "erasers", "scissors", "rulers
 export interface SlotSave {
   /** Crayon colour (hex) of each filled anchor; null = natural colours. */
   tints: (string | null)[];
-  /** The child's drawing (0-255 space, integer points) for the album. */
+  /** The child's drawing (0-255 space, integer points), legacy/album fallback. */
   drawing?: number[][][];
+  /** The child's own artwork (colours, proportions), shown in the world. */
+  arts?: Art[];
+  /** For each filled place, which art it shows. */
+  src?: number[];
 }
 
 export interface Settings {
@@ -77,6 +83,17 @@ export function sanitize(raw: unknown): SaveData {
             .filter(Array.isArray)
             .map((st) => (st as unknown[]).slice(0, 400).filter((pt): pt is number[] => Array.isArray(pt) && pt.length === 2 && pt.every((n) => Number.isFinite(n))));
           if (d.length) entry.drawing = d;
+        }
+        if (Array.isArray(s.arts)) {
+          const arts = (s.arts as unknown[]).slice(0, 8).map(sanitizeArt).filter((a): a is Art => a !== null);
+          if (arts.length) {
+            entry.arts = arts;
+            const src = Array.isArray(s.src) ? (s.src as unknown[]) : [];
+            entry.src = tints.map((_, i) => {
+              const v = src[i];
+              return typeof v === "number" && Number.isInteger(v) && v >= 0 && v < arts.length ? v : 0;
+            });
+          }
         }
         out.store.slots[key] = entry;
       }

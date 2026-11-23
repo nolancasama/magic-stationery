@@ -35,17 +35,17 @@ DESIGN_DECISIONS); the retrain is deterministic and reproduced it exactly.
   completion album).
 
 ## Current Work
-Verified 2026-11-23: tsc, 44 unit tests (incl. TS-vs-PyTorch parity), both e2e tests (Level 1 by speech with
-the rabbit surprise + reload; mic-off tap mode), full-playthrough screenshot pass at 1366x768 judged by
-Claude (`scripts/full-shots.mjs`). Peak 101 draw calls (restored shop + 3 shoppers). Live:
-https://nolancasama.github.io/magic-stationery/
-
-Fixed after the screenshot pass: customers froze outside the door (collision outside the room); conversation
-camera now over the player's shoulder with a line-of-sight check; ambient shoppers keep clear of scenes;
-crayon palette pushed out of the draw panel by the hint card; spent Next button now hides; town labels
-under the objective bar.
+2026-11-24: the child's own drawing is now the object in the world (DESIGN_DECISIONS, same date).
+`draw/art.ts` (artwork format), `objects/living.ts` (living drawings, transformation, behaviours),
+`game/config.ts` (`?models=1` restores the premade models, which are kept). Verified: tsc, 48 unit tests,
+both e2e tests (incl. reload rebuilding every display from saved drawings), `scripts/living-shots.mjs`
+(two different children's fish/ball/pencil side by side: fish swim, balls roll and bounce, all visibly
+different), full playthrough screenshots judged by Claude. Debug: `__ms.spawn(drawing, x, z)` brings any
+drawing to life (seed of the future invention phase).
 
 ## Known Issues
+- Drawing mode: 109 draw calls in the fully restored shop (budget ~100). Merge static display items if a Chromebook struggles.
+- Thin lines read small from the overview camera (faithful line weight); untested at real Chromebook DPI.
 - Drawing usability on a real Chromebook touchpad has not been tried (mouse/touch simulation only).
 - Speech recognition only exercised through the test hook, not a real microphone.
 - Inference ~31 ms/drawing on the desktop; untested on a slow Chromebook (live guesses run only in pauses).

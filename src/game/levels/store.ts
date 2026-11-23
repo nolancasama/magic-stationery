@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { audio } from "../../audio/audio.ts";
 import { music } from "../../audio/music.ts";
 import { CRAYONS, type Crayon } from "../../draw/drawing.ts";
-import { WORD_KINDS } from "../../objects/registry.ts";
+import { artFromDrawing, artToDrawing } from "../../draw/art.ts";
 import { completionCard, type AlbumItem } from "../../ui/screens.ts";
 import { COUNTER_FRONT, VIEWS, type SlotId } from "../../world/areas/store.ts";
 import { animate, arc, ease, wait } from "../../world/tween.ts";
@@ -185,7 +185,11 @@ async function stepCrayons(g: Game) {
       firstDrawing ??= out.drawing;
       const got = out.crayon;
       const right = got?.id === want.id || wrong >= 3;
-      const drawn = right && got?.id !== want.id ? { ...out, crayon: want } : out;
+      // After three wrong colours the pen's magic turns the crayon the colour Yui wants.
+      const drawn =
+        right && got?.id !== want.id
+          ? { ...out, crayon: want, drawing: { strokes: out.drawing.strokes.map((st) => ({ ...st, color: want.hex })) } }
+          : out;
       if (anchor < slot.anchors.length) {
         await g.restore("crayons", drawn, { anchor, fill: false, save: false });
         anchor++;
@@ -269,7 +273,7 @@ async function stepTaro(g: Game) {
   await g.say("taro", "Wow! A **schoolbag**!", "わあ、ランドセルだ！");
   // His own bag: a copy drops in front of him and is packed with things you drew.
   const tint = out.crayon?.hex ?? null;
-  const bag = WORD_KINDS.schoolbag.build(tint ? new THREE.Color(tint) : null, 0);
+  const bag = g.makeItem("schoolbag", 0, artFromDrawing(out.drawing), tint);
   const bagAt = new THREE.Vector3((g.player.position.x + taro.position.x) / 2, 0, (g.player.position.z + taro.position.z) / 2 + 0.55);
   bag.root.position.copy(slot.anchors[0].p);
   g.store.scene.add(bag.root);
@@ -279,7 +283,8 @@ async function stepTaro(g: Game) {
     bag.root.position.y += arc(k) * 0.6;
   });
   audio.bounce(1.1);
-  bag.parts.flap.rotation.x = -1.7;
+  if (bag.parts.flap) bag.parts.flap.rotation.x = -1.7;
+  else bag.root.rotation.y = Math.atan2(g.engine.camPos.x - bagAt.x, g.engine.camPos.z - bagAt.z);
   const pack: [string, string, string, SlotId, "pencil" | "eraser" | "notebook"][] = [
     ["Do you have a **pencil**?", "えんぴつ、ある？", "Really? I see **pencils** there!", "pencilCup", "pencil"],
     ["Do you have an **eraser**?", "けしゴム、ある？", "Really? I see **erasers** there!", "erasers", "eraser"],
@@ -288,7 +293,7 @@ async function stepTaro(g: Game) {
   for (const [q, ja, wrong, from, word] of pack) {
     await g.yesNo("taro", q, true, { en: wrong, ja: "ほんとう？ あそこに あるよ！" }, ja);
     const src = g.store.slots[from].anchors[1].p.clone().add(new THREE.Vector3(0, 0.3, 0));
-    const item = WORD_KINDS[word].build(null, 2);
+    const item = g.makeItem(word, 2, g.artFor(word), null);
     item.root.position.copy(src);
     g.store.scene.add(item.root);
     audio.whoosh(0.5);
@@ -305,7 +310,7 @@ async function stepTaro(g: Game) {
     taro.emote("nod", 0.8);
     await g.say("taro", `A **${WORDS[word].en}**! Thank you!`, `${WORDS[word].ja}！ ありがとう！`);
   }
-  bag.parts.flap.rotation.x = 0;
+  if (bag.parts.flap) bag.parts.flap.rotation.x = 0;
   audio.bounce(2);
   await g.ask({ kind: "command", options: ["thisIsForYou"], question: { who: "taro", en: "My schoolbag!" }, help: "ランドセルを わたそう：「This is for you.」" });
   g.player.emote("give", 1);
@@ -345,9 +350,12 @@ async function finale(g: Game) {
   await g.say("narrator", "The Stationery Store is restored!", "ぶんぼうぐやが もとに もどった！");
   g.dialogue.hide();
   const items: AlbumItem[] = SLOT_KEYS.map((k) => {
-    const d = g.save.store.slots[k]?.drawing;
+    const saved = g.save.store.slots[k];
+    const d = saved?.drawing;
     const word = WORDS[g.store.slots[k].word];
-    const drawing: Drawing | null = d ? { strokes: d.map((s) => ({ color: "#2f3a75", points: s.map(([x, y]) => [x, y] as [number, number]) })) } : null;
+    // Their own artwork, in their own colours.
+    const art = saved?.arts?.[0];
+    const drawing: Drawing | null = art ? artToDrawing(art) : d ? { strokes: d.map((s) => ({ color: "#2f3a75", points: s.map(([x, y]) => [x, y] as [number, number]) })) } : null;
     return { word: capital(word.plural), drawing };
   });
   await completionCard(g.ui, "The shop is back!", "おみせが もどったよ！", items, "Great!", "やったね！");

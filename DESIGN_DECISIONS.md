@@ -126,3 +126,26 @@ Ported from monster-island (`speech/recognition.ts`, `tts.ts`, matcher rules):
   output folder disappeared from the session scratchpad and the weights were only in memory. `train.py`
   now creates its own output folder, checkpoints `best.pt` after every improving epoch, and can export
   from a checkpoint alone (`epochs = 0`); outputs go to the git-ignored `.tmp/model-out` in the project.
+
+## 2026-11-24 — The child's own drawing is the object (user plan "Preserve and Animate the Player's Actual Drawing")
+
+- **What:** recognition now only decides *what* a drawing is and *how it moves*; the thing that appears in the
+  world is the child's artwork itself (`draw/art.ts`: strokes, colours, proportions, wobbles, tightly cropped,
+  transparent; `objects/living.ts`: a textured plane with a small vertex shader for swim wiggle, wing flap and
+  idle sway). The same object flies from the page into the world (`bringToLife`): no swap at the end.
+- **Behaviour by category** (`behaviourOf`): swim, fly, hop, jump, walk, waddle, bounce (sphere physics on a
+  proxy radius; the picture rolls), drive, rise, grow; anything else wobble-hops. Drawings mirror to face the
+  way they move. Display entrances: spin (pencil, ruler), bounce (eraser), snip (scissors), drop (crayon),
+  open/close (book: its width folds), flutter (notebook), hop (schoolbag).
+- **Saved:** each display stores its artworks and which one each place shows (`arts`, `src` in the slot save,
+  validated by `sanitizeArt`); a reload rebuilds the child's drawings. Saves from before this change fall back
+  to their saved lines in magic ink.
+- **Modifications to the plan:** long thin drawings (pencil, crayon, ruler) are rotated upright to stand in
+  their display — a rotation only. Copies that fill a display are copies of the child's drawing (taking turns
+  if they drew several). The faint ghost outlines of missing things stay (a hint effect). When Yui's crayon is
+  the wrong colour three times, the pen's magic recolours that crayon's strokes (the only edit to artwork).
+- **Premade models are kept, not deleted (user instruction):** `?models=1` (`game/config.ts`) switches back to
+  the original models, tints and entrances, unchanged.
+- **Measured:** fully restored shop in drawing mode 109 draw calls (models mode 99) at 1366×768 SwiftShader.
+- **Rejected:** image-to-3D generation (too heavy for Chromebooks); a white sticker border/fill around drawings
+  (it changed the child's style; the old "living doodle" did this).
