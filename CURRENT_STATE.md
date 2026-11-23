@@ -35,13 +35,21 @@ DESIGN_DECISIONS); the retrain is deterministic and reproduced it exactly.
   completion album).
 
 ## Current Work
-2026-11-24: the child's own drawing is now the object in the world (DESIGN_DECISIONS, same date).
-`draw/art.ts` (artwork format), `objects/living.ts` (living drawings, transformation, behaviours),
-`game/config.ts` (`?models=1` restores the premade models, which are kept). Verified: tsc, 48 unit tests,
-both e2e tests (incl. reload rebuilding every display from saved drawings), `scripts/living-shots.mjs`
-(two different children's fish/ball/pencil side by side: fish swim, balls roll and bounce, all visibly
-different), full playthrough screenshots judged by Claude. Debug: `__ms.spawn(drawing, x, z)` brings any
-drawing to life (seed of the future invention phase).
+**Committed + live (2026-11-24, `main`):** the child's own drawing is the object in the world
+(`draw/art.ts`, `objects/living.ts`, `game/config.ts`; `?models=1` restores the kept premade models).
+Verified then: tsc, 48 unit tests, both e2e tests, living-shots + full-playthrough screenshots.
+
+**In progress, NOT committed (user requests 2026-11-24):**
+1. Auto-fill + colouring in: `draw/fill.ts` (flood/interior/grow, DOM-free), `art.ts` now stores the child's
+   paint-bucket fills (`fills` seeds) and `renderArt` paints their fills, then a soft tint of their line colour
+   in closed areas they left empty, then their lines. Draw panel has a 🪣 Fill toggle (row with Hint); fills
+   are refused outside closed shapes; Undo steps strokes/fills in order (`actions`).
+2. Hinged halves for player art: `buildLiving({ hinge: true })` splits the drawing into left/right halves
+   (`parts.left/right`); `ENTRANCES.snip` opens/closes the halves (scissors), `ENTRANCES.book` swings them
+   like covers.
+   **Still to do:** pass `hinge: true` for scissors and book in `game.ts` `DISPLAY`/`makeItem`; typecheck; unit
+   tests for `fill.ts` and art fills; e2e; screenshot check of auto-fill, Fill tool, snipping scissors; record
+   in DESIGN_DECISIONS; commit + push (Pages redeploys).
 
 ## Known Issues
 - Drawing mode: 109 draw calls in the fully restored shop (budget ~100). Merge static display items if a Chromebook struggles.
