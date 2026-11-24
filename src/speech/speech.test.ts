@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { judgeSpeech, matchesPhrase } from "./match.ts";
-import { PHRASES } from "./phrases.ts";
+import { isSpeechPrefix, judgeSpeech, matchesPhrase } from "./match.ts";
+import { PHRASES, type PhraseId } from "./phrases.ts";
 
 const P = PHRASES;
 
@@ -41,5 +41,25 @@ describe("alternatives", () => {
   it("only rescue a top hypothesis that matched nothing", () => {
     expect(judgeSpeech(["do you have a bed", "do you have a pen"], [P.doYouHavePen])).toMatchObject({ kind: "match" });
     expect(judgeSpeech(["no I don't", "yes I do"], [P.yesIDo, P.noIDont])).toMatchObject({ id: "noIDont" });
+  });
+});
+
+describe("accept or keep listening", () => {
+  const cases: [string, string, PhraseId, PhraseId[]][] = [
+    ["Here you are.", "Here you", "hereYouAre", ["hereYouAre"]],
+    ["Do you have a pencil?", "Do you have", "doYouHavePencil", ["doYouHavePencil"]],
+    ["Eight thirty.", "Eight", "itsEightThirty", ["itsEightThirty"]],
+    ["I like apples.", "I like", "iLikeApples", ["iLikeApples"]]
+  ];
+  it.each(cases)("accepts a complete %s and recognises its prefix", (full, prefix, id, ids) => {
+    const options = ids.map((option) => P[option]);
+    expect(judgeSpeech([full], options)).toEqual({ kind: "match", id, heard: full });
+    expect(judgeSpeech([prefix], options).kind).toBe("none");
+    expect(isSpeechPrefix(prefix, options)).toBe(true);
+  });
+
+  it("only settles eight when a longer valid choice is on offer", () => {
+    expect(judgeSpeech(["eight"], [P.itsEight, P.itsEightThirty])).toMatchObject({ id: "itsEight", pending: true });
+    expect(judgeSpeech(["eight"], [P.itsEight, P.itsSeven])).toEqual({ kind: "match", id: "itsEight", heard: "eight" });
   });
 });

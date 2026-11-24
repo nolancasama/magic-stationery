@@ -25,6 +25,7 @@ export interface Phrase {
 
 export type PhraseId =
   | "doYouHavePen"
+  | "doYouHavePencil"
   | "yesIDo"
   | "noIDont"
   | "thisIsForYou"
@@ -48,6 +49,7 @@ export type PhraseId =
   | "howMany"
   | "hereYouAre"
   | "wantApples"
+  | "iLikeApples"
   | "wantOranges"
   | "wantTomatoes"
   | "wantCarrots"
@@ -116,6 +118,13 @@ export const PHRASES: Record<PhraseId, Phrase> = {
     keys: [HAVE, PEN],
     distractors: ["doYouLikePens", "whatTimeIsIt"]
   },
+  doYouHavePencil: {
+    id: "doYouHavePencil",
+    en: "Do you have a pencil?",
+    ja: "えんぴつを もっていますか？",
+    keys: [HAVE, ["pencil", "pencils", "pensil", "pensils", "pencel", "pen cil"]],
+    distractors: ["doYouHavePen", "whatTimeIsIt"]
+  },
   yesIDo: { id: "yesIDo", en: "Yes, I do.", ja: "はい、もっています。", keys: [YES], forbid: NO },
   noIDont: { id: "noIDont", en: "No, I don't.", ja: "いいえ、もっていません。", keys: [NO], forbid: ["yes", "yeah", "yep", "yup"] },
   thisIsForYou: {
@@ -146,8 +155,9 @@ export const PHRASES: Record<PhraseId, Phrase> = {
   // The Supermarket: the child serves customers, then shops.
   whatDoYouWant: { id: "whatDoYouWant", en: "What do you want?", ja: "なにが ほしいですか？", keys: [WHAT, WANT], distractors: ["howMany", "whatAnimal"] },
   howMany: { id: "howMany", en: "How many?", ja: "いくつ？", keys: [HOW, MANY], distractors: ["whatDoYouWant", "hereYouAre"] },
-  hereYouAre: { id: "hereYouAre", en: "Here you are.", ja: "はい、どうぞ。", keys: [HERE], distractors: ["thankYou", "howMany"] },
+  hereYouAre: { id: "hereYouAre", en: "Here you are.", ja: "はい、どうぞ。", keys: [HERE, YOU, ["are", "ar", "r", "go"]], distractors: ["thankYou", "howMany"] },
   wantApples: { id: "wantApples", en: "I want apples, please.", ja: "りんごを ください。", keys: [APPLE] },
+  iLikeApples: { id: "iLikeApples", en: "I like apples.", ja: "りんごが すきです。", keys: [LIKE, APPLE] },
   wantOranges: { id: "wantOranges", en: "I want oranges, please.", ja: "オレンジを ください。", keys: [ORANGE] },
   wantTomatoes: { id: "wantTomatoes", en: "I want tomatoes, please.", ja: "トマトを ください。", keys: [TOMATO] },
   wantCarrots: { id: "wantCarrots", en: "I want carrots, please.", ja: "にんじんを ください。", keys: [CARROT] },

@@ -32,15 +32,25 @@ interface PlaceSpec {
   ja: string;
   at: [number, number];
   rot: number;
-  build: (p: Parts) => void;
+  build: (p: Parts) => Facade;
   signText: string;
   signColor: string;
+}
+
+/** The clear section of the front face that can carry a sign. */
+interface Facade {
+  width: number;
+  bottom: number;
+  top: number;
+  frontZ: number;
 }
 
 function house(p: Parts, w: number, h: number, d: number, wall: string, roof: string) {
   p.box(w, h, d, wall, { p: [0, h / 2, 0] });
   p.box(w + 0.3, 0.25, d + 0.3, shade(roof, 0.85), { p: [0, h + 0.12, 0] });
   p.box(w * 0.92, 0.12, 0.05, "#ffffff", { p: [0, 0.06, d / 2 + 0.01] });
+  // Leave clearance below the roof overhang for the elevated town camera.
+  return { width: w, top: h - 0.12, frontZ: d / 2 };
 }
 
 function windows(p: Parts, w: number, y: number, z: number, n: number, color = "#bfe6ff") {
@@ -61,7 +71,7 @@ const SPECS: PlaceSpec[] = [
     signText: "STATIONERY",
     signColor: "#ff8fb1",
     build: (p) => {
-      house(p, 4.2, 2.8, 3.2, "#ffe3ec", "#ff8fb1");
+      const facade = house(p, 4.2, 2.8, 3.2, "#ffe3ec", "#ff8fb1");
       p.box(1.1, 1.9, 0.1, "#a1663f", { p: [0.9, 0.95, 1.62] });
       p.box(1.6, 1.2, 0.08, "#bfe6ff", { p: [-0.9, 1.4, 1.62] });
       p.box(1.8, 0.12, 0.3, "#ff8fb1", { p: [-0.9, 2.1, 1.75] });
@@ -70,6 +80,7 @@ const SPECS: PlaceSpec[] = [
       p.cyl(0.05, 0.25, 0.6, "#f3d2a2", { p: [1.6, 3.5, 0], r: [0, 0, -Math.PI / 2] }, 6);
       p.cyl(0.26, 0.26, 0.35, "#c3c9cf", { p: [-1.45, 3.5, 0], r: [0, 0, Math.PI / 2] }, 10);
       p.cyl(0.25, 0.25, 0.3, "#f48fb1", { p: [-1.75, 3.5, 0], r: [0, 0, Math.PI / 2] }, 10);
+      return { ...facade, bottom: 2.17 };
     }
   },
   {
@@ -81,13 +92,14 @@ const SPECS: PlaceSpec[] = [
     signText: "SCHOOL",
     signColor: "#64b5f6",
     build: (p) => {
-      house(p, 5.2, 3.2, 3.2, "#f5f5f0", "#64b5f6");
+      const facade = house(p, 5.2, 3.2, 3.2, "#f5f5f0", "#64b5f6");
       windows(p, 5.0, 2.0, 1.6, 4);
       p.box(1.2, 2.0, 0.1, "#795548", { p: [0, 1.0, 1.62] });
       p.box(1.3, 1.6, 1.3, "#f5f5f0", { p: [0, 4.0, 0] });
       p.cone(1.0, 0.9, "#64b5f6", { p: [0, 5.25, 0] }, 4);
       p.cyl(0.42, 0.42, 0.08, "#ffffff", { p: [0, 4.1, 0.66], r: [Math.PI / 2, 0, 0] }, 20);
       p.box(0.05, 0.3, 0.02, "#37474f", { p: [0, 4.2, 0.71] });
+      return { ...facade, bottom: 2.35 };
     }
   },
   {
@@ -103,7 +115,8 @@ const SPECS: PlaceSpec[] = [
         p.box(0.6, 3.2, 0.6, "#8d6e63", { p: [sx * 1.6, 1.6, 0] });
         p.sphere(0.45, "#66bb6a", { p: [sx * 1.6, 3.4, 0] }, 10, 8);
       }
-      p.box(3.8, 0.7, 0.4, "#a1887f", { p: [0, 2.7, 0] });
+      const beam = { width: 3.8, height: 0.7, depth: 0.4, y: 2.7 };
+      p.box(beam.width, beam.height, beam.depth, "#a1887f", { p: [0, beam.y, 0] });
       for (let i = 0; i < 9; i++) {
         p.box(0.12, 1.2, 0.12, "#a1887f", { p: [-6 + i * 0.5, 0.6, -0.2] });
         p.box(0.12, 1.2, 0.12, "#a1887f", { p: [2.2 + i * 0.5, 0.6, -0.2] });
@@ -114,6 +127,7 @@ const SPECS: PlaceSpec[] = [
         p.cyl(0.18, 0.22, 1.6, "#8d6e63", { p: [x, 0.8, z] }, 8);
         p.sphere(s, "#81c784", { p: [x, 2.3, z] }, 10, 8);
       }
+      return { width: beam.width, bottom: beam.y - beam.height / 2, top: beam.y + beam.height / 2, frontZ: beam.depth / 2 };
     }
   },
   {
@@ -125,10 +139,11 @@ const SPECS: PlaceSpec[] = [
     signText: "SUPERMARKET",
     signColor: "#43a047",
     build: (p) => {
-      house(p, 5.0, 2.9, 3.4, "#fff8e1", "#43a047");
+      const facade = house(p, 5.0, 3.24, 3.4, "#fff8e1", "#43a047");
       for (let i = 0; i < 8; i++) p.box(0.62, 0.5, 0.7, i % 2 ? "#ffffff" : "#43a047", { p: [-2.2 + i * 0.63, 2.15, 1.95], r: [0.5, 0, 0] });
       p.box(3.2, 1.4, 0.08, "#bfe6ff", { p: [-0.6, 1.1, 1.72] });
       p.box(1.0, 1.9, 0.1, "#9e9e9e", { p: [1.8, 0.95, 1.72] });
+      return { ...facade, bottom: 2.57 };
     }
   },
   {
@@ -142,9 +157,11 @@ const SPECS: PlaceSpec[] = [
     build: (p) => {
       p.box(4.6, 2.6, 3.6, "#e3f2fd", { p: [0, 1.3, 0] });
       p.cyl(2.3, 2.3, 4.0, "#ff7043", { p: [0, 2.6, 0], r: [Math.PI / 2, 0, 0] }, 16);
-      p.box(4.7, 0.3, 4.1, "#e3f2fd", { p: [0, 2.6, 0] });
+      const fascia = { width: 4.7, height: 0.5, depth: 4.1, y: 2.6 };
+      p.box(fascia.width, fascia.height, fascia.depth, "#e3f2fd", { p: [0, fascia.y, 0] });
       p.box(1.4, 2.0, 0.1, "#607d8b", { p: [0, 1.0, 1.82] });
       p.sphere(0.5, "#ff9800", { p: [1.7, 3.8, 1.2] }, 12, 10);
+      return { width: fascia.width, bottom: fascia.y - fascia.height / 2, top: fascia.y + fascia.height / 2, frontZ: fascia.depth / 2 };
     }
   }
 ];
@@ -208,10 +225,13 @@ export class TownArea {
       const uniforms = makeRestoreUniforms(0.08);
       const group = new THREE.Group();
       const p = new Parts();
-      s.build(p);
+      const facade = s.build(p);
       group.add(p.mesh(worldMaterial({}, uniforms)));
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.55), worldBasicMaterial({ map: signTexture(s.signText, { bg: s.signColor, fg: "#ffffff", border: "#ffffff" }), transparent: true }, uniforms));
-      sign.position.set(0, s.id === "zoo" ? 2.7 : 3.05, s.id === "zoo" ? 0.22 : 1.75);
+      const width = Math.min(facade.width * 0.82, s.id === "market" ? 3.8 : 2.6);
+      const height = Math.min(0.55, facade.top - facade.bottom - 0.06);
+      const map = signTexture(s.signText, { w: 512, h: Math.round(512 * height / width), bg: s.signColor, fg: "#ffffff", border: "#ffffff" });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(width, height), worldBasicMaterial({ map, transparent: true }, uniforms));
+      sign.position.set(0, (facade.bottom + facade.top) / 2, facade.frontZ + 0.035);
       group.add(sign);
       const [x, z] = s.at;
       group.position.set(x, 0, z);

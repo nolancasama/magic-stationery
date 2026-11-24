@@ -24,12 +24,13 @@ import type { PhraseId } from "../../speech/phrases.ts";
 import { tts } from "../../speech/tts.ts";
 import { voiceOf } from "../../ui/dialogue.ts";
 import { completionCard, type AlbumItem } from "../../ui/screens.ts";
-import { CHECKOUT, GREEN_SPOT, VIEWS, type MarketSlotId } from "../../world/areas/market.ts";
-import type { Slot } from "../../world/areas/room.ts";
+import { CHECKOUT, GREEN_AISLE, GREEN_SPOT, VIEWS, type MarketSlotId } from "../../world/areas/market.ts";
+import type { Slot, View } from "../../world/areas/room.ts";
 import type { Character } from "../../world/characters.ts";
 import { animate, arc, ease, wait } from "../../world/tween.ts";
 import { MARKET_SLOT_KEYS, placeProgress } from "../save.ts";
 import type { Game, NpcId } from "../game.ts";
+import { startCounting, updateCounting } from "./counting.ts";
 
 const ORANGE = CRAYONS.find((c) => c.id === "orange") as Crayon;
 const RED = CRAYONS.find((c) => c.id === "red") as Crayon;
@@ -214,65 +215,82 @@ const BASKET_SPOTS = [
 /** Items shrink into the basket to about 15 cm. */
 const IN_BASKET: Record<MarketSlotId, number> = { apples: 0.58, oranges: 0.58, tomatoes: 0.6, carrots: 0.42, milk: 0.45, eggs: 0.75 };
 
-/**
- * The child clicks the display once per item while the "Here you are." prompt stays open; each
- * click sends one hopping into the basket, counted aloud. One too many hops straight back ("Oops!
- * Three, please!"); too few when they say it gets "That's two. Three, please!". After two short
- * tries the magic adds the rest. Returns how many are in the basket.
- */
+/** Count the food into the basket, then open the handoff prompt. */
 async function countInto(g: Game, c: Character, who: NpcId, id: MarketSlotId, want: number): Promise<number> {
   const slot = g.market.slots[id];
   const food = FOODS[id];
   const basket = c.carried;
   if (!basket) return want;
-  let count = 0;
-  let anim: Promise<unknown> = Promise.resolve();
-  let tries = 0;
+  let state = startCounting(want);
+  let hops = Promise.resolve();
   const wantWord = cap(NUMBERS[want]);
-  g.focus(slot.view);
-  for (;;) {
-    g.objective(`Click the ${food.plural}: put them in the basket. Then say "Here you are."`, `${food.ja}を クリックして かごに いれよう。それから「Here you are.」`, slot.marker);
-    let spoken = false;
-    const answer = g.ask({ kind: "command", options: ["hereYouAre"], question: { who, en: `${wantWord}, please.` }, help: `${food.ja}を ${NUMBERS_JA[want]} かごに いれてから「Here you are.」` });
-    void answer.then(() => {
-      spoken = true;
-      g.cancelPick();
+  const goal = `Put ${want} ${food.plural} in the basket.`;
+  const goalJa = `${food.ja}を ${NUMBERS_JA[want]} かごに いれよう。`;
+  const showCount = (n: number) => g.objective(`${goal} ${n} / ${want}`, goalJa, slot.marker);
+  const addItem = () => {
+    state = updateCounting(state, "pick");
+    const n = state.count;
+    hops = hops.then(async () => {
+      await hop(g, slot, basket, n, who);
+      showCount(n);
+      if (n === want) await wait(0.25);
     });
-    while (!spoken) {
-      const picked = await g.pickSlot([id]);
-      if (!picked || spoken) break;
-      count++;
-      const n = count;
-      if (n > want) {
-        // One too many: it hops in, then straight back.
-        count--;
-        anim = anim.then(async () => {
-          const extra = await hop(g, slot, basket, n, null);
-          c.emote("surprised", 1.0);
-          g.hud.say(`Oops! ${wantWord}, please!`, `${NUMBERS_JA[want]} だよ！`, 2200);
-          void tts.speak(`Oops! ${wantWord}, please!`, voiceOf(who));
-          await hopBack(g, slot, extra);
-        });
-      } else anim = anim.then(() => hop(g, slot, basket, n, who));
+  };
+  g.dialogue.hide();
+  g.engine.setLensShift(0);
+  g.focus(countView(slot, basket));
+  showCount(0);
+  while (state.count < state.want && state.idleHints < 2) {
+    const idle = animate(8, () => {});
+    const picked = await Promise.race([g.pickSlot([id]), idle.then(() => "")]);
+    idle.cancel();
+    if (picked === id) {
+      addItem();
+      continue;
     }
-    await answer;
-    await anim;
-    if (count === want) break;
-    tries++;
+    g.cancelPick();
+    state = updateCounting(state, "idle");
+    if (state.idleHints >= 2) break;
+    const hint = `Click the ${food.plural}, please!`;
     c.emote("think", 1.4);
-    if (tries >= 3) {
-      // The pen's magic counts out the rest: every child can finish.
-      g.hud.say("The magic pen helped you!", "まほうのペンが てつだってくれたよ！");
-      audio.magic();
-      for (let n = count + 1; n <= want; n++) await hop(g, slot, basket, n, who);
-      count = want;
-      break;
-    }
-    await g.say(who, count === 0 ? `My basket is empty! **${wantWord}**, please.` : `That's **${NUMBERS[count]}**. **${wantWord}**, please!`, count === 0 ? `かごが からっぽだよ！ ${NUMBERS_JA[want]} ください。` : `${NUMBERS_JA[count]}だね。${NUMBERS_JA[want]} ください！`);
+    g.hud.say(hint, `${food.ja}の ところを クリックしてね！`, 3400);
+    g.effects.twinkle(slot.marker, 0.25, "#fff59d");
+    void tts.speak(hint, voiceOf(who));
   }
+  // A quick extra click before the finished count clears hops back.
+  const extra = state.count === state.want && (await Promise.race([g.pickSlot([id]), hops.then(() => "")])) === id;
+  g.cancelPick();
+  if (state.count < state.want) {
+    g.hud.say("The magic pen helped you!", "まほうのペンが てつだってくれたよ！");
+    audio.magic();
+    while (state.count < state.want) addItem();
+  }
+  await hops;
+  if (extra) {
+    const item = await hop(g, slot, basket, want + 1, null);
+    c.emote("surprised", 1.0);
+    g.hud.say(`Oops! ${wantWord}, please!`, `${NUMBERS_JA[want]} だよ！`, 2200);
+    void tts.speak(`Oops! ${wantWord}, please!`, voiceOf(who));
+    await hopBack(g, slot, item);
+  }
+  state = updateCounting(state, "ready");
   g.objective(null);
-  g.player.emote("give", 0.8);
-  return count;
+  if (state.phase === "speaking") {
+    const answer = await g.ask({ kind: "command", options: ["hereYouAre"], question: { who, en: `${wantWord}, please.` }, help: "「Here you are.」と いって わたそう。" });
+    if (answer === "hereYouAre") state = updateCounting(state, "answer");
+  }
+  if (state.phase === "done") g.player.emote("give", 0.8);
+  return state.count;
+}
+
+/**
+ * Counting is watched from above the people's heads: the display and the basket the food lands in are
+ * both in view (the display's own view looks past the customer's back and loses the basket).
+ */
+function countView(slot: Slot, basket: THREE.Object3D): View {
+  const b = basket.getWorldPosition(new THREE.Vector3());
+  const mid = slot.anchors[0].p.clone().lerp(b, 0.5);
+  return { pos: mid.clone().add(new THREE.Vector3(0.35, 2.0, 2.1)), look: mid.setY(0.6) };
 }
 
 /** One item flies from the display into the basket (and stays in it). `who` counts it aloud. */
@@ -374,7 +392,7 @@ const COUNT_OF: Partial<Record<PhraseId, number>> = { onePlease: 1, twoPlease: 2
 
 async function stepShopping(g: Game) {
   const green = g.cast.green;
-  await g.player.go(-2.5, 0.3);
+  await g.player.go(-2.5, 0.6);
   g.player.faceTo(green.position.x, green.position.z);
   g.focus(g.talkView(g.player, green));
   await g.say("green", "My supermarket is full of food again! Thank you!", "スーパーが また たべもので いっぱいに なった！ ありがとう！");
@@ -390,12 +408,13 @@ async function stepShopping(g: Game) {
   const n = await g.ask({ kind: "choice", options: NUMBER_OPTIONS, question: { who: "green", en: "How many?" }, help: "かずを えらんで いおう：___, please." });
   const count = COUNT_OF[n] ?? 1;
   await g.say("green", `**${cap(NUMBERS[count])}** ${count === 1 ? food.word : food.plural}. Coming up!`, `${food.ja}を ${NUMBERS_JA[count]}だね。まかせて！`);
-  // Mr. Green comes round the counter to the display and counts them into the player's basket.
+  // Use the aisle behind the checkout to give Mr. Green room to clear its corner.
   const slot = g.market.slots[slotId];
-  const face = slot.anchors[0].p;
-  await Promise.all([green.go(slot.stand.x + 0.5, slot.stand.z + 0.05), g.player.go(slot.stand.x - 0.45, slot.stand.z + 0.2)]);
-  green.faceTo(face.x, face.z);
-  g.player.faceTo(face.x, face.z);
+  await green.go(GREEN_AISLE.x, GREEN_AISLE.z);
+  await green.go(slot.serve.x, slot.serve.z);
+  green.faceHeading(slot.serve.facing);
+  await g.player.go(slot.stand.x, slot.stand.z);
+  g.player.faceTo(green.position.x, green.position.z);
   g.focus(slot.view);
   const basket = g.player.carried;
   if (basket) {
@@ -416,7 +435,9 @@ async function stepShopping(g: Game) {
   const before = placeProgress(g.save, "market");
   g.completeStep("shopping");
   g.progressed(new THREE.Vector3(0, 1, 0.4), before);
-  void green.go(GREEN_SPOT.x, GREEN_SPOT.z).then(() => green.faceTo(GREEN_SPOT.x, GREEN_SPOT.z + 1));
+  void green.go(GREEN_AISLE.x, GREEN_AISLE.z)
+    .then(() => green.go(GREEN_SPOT.x, GREEN_SPOT.z))
+    .then(() => green.faceHeading(0));
 }
 
 // ---------------------------------------------------------------- the supermarket is back

@@ -38,8 +38,8 @@ const OBSTACLES: Rect[] = [
 
 export const VIEWS: RoomArea["views"] = {
   overview: { pos: v(0.25, 6.7, 9.7), look: v(0.15, 1.2, -0.95) },
-  door: { pos: v(1.6, 2.6, 4.6), look: v(3.6, 1.0, 1.4) },
-  cart: { pos: v(-1.9, 2.0, 4.6), look: v(-2.9, 0.5, 2.2) },
+  door: { pos: v(1.6, 2.6, 2.9), look: v(4.5, 0.65, 1.65) },
+  cart: { pos: v(-2.15, 3.15, 4.0), look: v(-2.9, 0.5, 2.3) },
   goal: { pos: v(-0.6, 2.4, 3.6), look: v(-3.4, 0.6, 0.6) },
   hoops: { pos: v(0.0, 2.3, 3.4), look: v(0.0, 2.3, -2.6) },
   rack: { pos: v(2.5, 2.1, 0.8), look: v(3.6, 0.8, -2.6) },
@@ -153,7 +153,8 @@ export class GymArea implements RoomArea {
     p.box(1.0, 0.04, 0.6, "#90a4ae", { p: [-2.9, 0.3, 2.3] });
     for (const sx of [-1, 1]) p.box(0.03, 0.5, 0.6, "#b0bec5", { p: [-2.9 + sx * 0.5, 0.55, 2.3] });
     for (const sz of [-1, 1]) p.box(1.0, 0.5, 0.02, "#b0bec5", { p: [-2.9, 0.55, 2.3 + sz * 0.3] });
-    for (let i = 1; i < 6; i++) p.box(0.012, 0.5, 0.61, "#cfd8dc", { p: [-3.4 + i * 0.167, 0.55, 2.3] });
+    // Wire bars on the long walls only: no dividers inside, the balls share one basket.
+    for (let i = 1; i < 6; i++) for (const sz of [-1, 1]) p.box(0.012, 0.5, 0.012, "#cfd8dc", { p: [-3.4 + i * 0.167, 0.55, 2.3 + sz * 0.31] });
     for (const [x, z] of [[-3.3, 2.05], [-2.5, 2.05], [-3.3, 2.55], [-2.5, 2.55]]) p.cyl(0.07, 0.07, 0.05, "#424242", { p: [x, 0.08, z], r: [Math.PI / 2, 0, 0] }, 10);
     for (const [x, z] of [[-3.3, 2.05], [-2.5, 2.05], [-3.3, 2.55], [-2.5, 2.55]]) p.box(0.03, 0.25, 0.03, "#90a4ae", { p: [x, 0.2, z] });
     // Ball rack: two shelves against the back wall.
@@ -235,13 +236,13 @@ export class GymArea implements RoomArea {
 
   // ------------------------------------------------------------------ slots
   private buildSlots(): Record<GymSlotId, Slot> {
-    // Piled up so they show over the cart's wire walls (rim at 0.8).
+    // Three balls rest on the basket floor, with two nestled above them.
     const balls: Anchor[] = [
-      { p: v(-3.2, 0.5, 2.3), r: e() },
-      { p: v(-2.9, 0.52, 2.32), r: e(0, 0.5, 0) },
-      { p: v(-2.6, 0.5, 2.28), r: e(0, -0.4, 0) },
-      { p: v(-3.05, 0.72, 2.36), r: e(0, 0.9, 0) },
-      { p: v(-2.75, 0.72, 2.32), r: e(0, -0.8, 0) }
+      { p: v(-3.22, 0.325, 2.3), r: e(), s: 0.85 },
+      { p: v(-2.9, 0.325, 2.32), r: e(0, 0.5, 0), s: 0.85 },
+      { p: v(-2.58, 0.325, 2.28), r: e(0, -0.4, 0), s: 0.85 },
+      { p: v(-3.06, 0.55, 2.36), r: e(0, 0.9, 0), s: 0.85 },
+      { p: v(-2.74, 0.55, 2.32), r: e(0, -0.8, 0), s: 0.85 }
     ];
     const basketballs: Anchor[] = [
       { p: v(3.3, 0.44, -2.6), r: e() },

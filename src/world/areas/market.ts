@@ -20,11 +20,15 @@ const e = (x = 0, y = 0, z = 0) => new THREE.Euler(x, y, z);
 export const ROOM: Rect = { minX: -4.45, maxX: 4.45, minZ: -2.95, maxZ: 2.95 };
 export const DOOR = { x: 4.25, z: 1.7, outsideX: 5.6 };
 export const GREEN_SPOT = { x: -3.3, z: -1.62 };
+/** The clear aisle behind the checkout, beside the dairy fridge. */
+export const GREEN_AISLE = { x: -1.98, z: -1.8 };
 /** Where customers stand to pay (in front of the register). */
 export const CHECKOUT = { x: -3.1, z: 0.05 };
 
 export type MarketSlotId = "apples" | "oranges" | "tomatoes" | "carrots" | "milk" | "eggs";
 export type CrateId = "apples" | "oranges" | "tomatoes" | "carrots";
+type FloorPoint = { x: number; z: number };
+type MarketSlot = Slot & { serve: FloorPoint & { facing: number } };
 
 /** Crate centres along the two stands (fruit on the left, vegetables on the right). */
 export const CRATES: Record<CrateId, number> = { apples: -0.8, oranges: 0.2, tomatoes: 1.6, carrots: 2.6 };
@@ -72,7 +76,7 @@ export class MarketArea implements RoomArea {
     [0.9, 2.3, null]
   ];
   readonly nav: NavMap;
-  readonly slots: Record<MarketSlotId, Slot>;
+  readonly slots: Record<MarketSlotId, MarketSlot>;
   readonly spots = {};
   readonly floor: THREE.Mesh;
   readonly solids: THREE.Object3D[] = [];
@@ -282,7 +286,7 @@ export class MarketArea implements RoomArea {
   }
 
   // ------------------------------------------------------------------ slots
-  private buildSlots(): Record<MarketSlotId, Slot> {
+  private buildSlots(): Record<MarketSlotId, MarketSlot> {
     // Five in each leaning crate: three at the front (lower), two behind (higher).
     const crate = (id: CrateId): Anchor[] => {
       const cx = CRATES[id];
@@ -298,7 +302,7 @@ export class MarketArea implements RoomArea {
     const milk: Anchor[] = [-1.05, -0.52, 0, 0.52, 1.05].map((x) => ({ p: v(x, MILK_Y, FRIDGE_Z + 0.04), r: e() }));
     const eggs: Anchor[] = [-0.75, -0.45, -0.15, 0.15, 0.45, 0.75].map((x, i) => ({ p: v(x, EGG_Y + 0.05, FRIDGE_Z + 0.03 + (i % 2) * 0.06), r: e(0, i * 0.7, 0), s: 1.2 }));
 
-    const make = (id: MarketSlotId, word: WordId, anchors: Anchor[], marker: THREE.Vector3, stand: { x: number; z: number }, view: View, hot: [THREE.Vector3, THREE.Vector3]): Slot => {
+    const make = (id: MarketSlotId, word: WordId, anchors: Anchor[], marker: THREE.Vector3, stand: FloorPoint, serve: FloorPoint, view: View, hot: [THREE.Vector3, THREE.Vector3]): MarketSlot => {
       const ghosts = anchors.map((a, i) => {
         const g = WORD_KINDS[word].build(null, i);
         g.root.position.copy(a.p);
@@ -315,19 +319,24 @@ export class MarketArea implements RoomArea {
       hotspot.position.copy(hot[0]).add(size.multiplyScalar(0.5));
       hotspot.userData.slot = id;
       this.scene.add(hotspot);
-      return { id, word, anchors, ghosts, items: [], hotspot, marker, stand, view };
+      return {
+        id, word, anchors, ghosts, items: [], hotspot, marker, stand, view,
+        serve: { ...serve, facing: Math.atan2(stand.x - serve.x, stand.z - serve.z) }
+      };
     };
     const crateSlot = (id: CrateId, word: WordId, view: View) => {
       const cx = CRATES[id];
-      return make(id, word, crate(id), v(cx, 1.55, STAND_Z), { x: cx, z: 1.4 }, view, [v(cx - 0.47, TABLE_TOP - 0.05, STAND_Z - 0.4), v(cx + 0.47, TABLE_TOP + 0.5, STAND_Z + 0.45)]);
+      return make(id, word, crate(id), v(cx, 1.55, STAND_Z), { x: cx, z: 1.4 }, { x: cx + 0.35, z: -0.7 }, view, [v(cx - 0.47, TABLE_TOP - 0.05, STAND_Z - 0.4), v(cx + 0.47, TABLE_TOP + 0.5, STAND_Z + 0.45)]);
     };
+    // The fridge backs up to the wall, so Mr. Green serves from its left end.
+    const dairyServe = GREEN_AISLE;
     return {
       apples: crateSlot("apples", "apple", VIEWS.fruit),
       oranges: crateSlot("oranges", "orange", VIEWS.fruit),
       tomatoes: crateSlot("tomatoes", "tomato", VIEWS.veg),
       carrots: crateSlot("carrots", "carrot", VIEWS.veg),
-      milk: make("milk", "milk", milk, v(0, 2.0, -2.3), { x: -0.2, z: -1.75 }, VIEWS.fridge, [v(-1.42, MILK_Y - 0.02, -2.92), v(1.42, MILK_Y + 0.62, -2.28)]),
-      eggs: make("eggs", "egg", eggs, v(0, EGG_Y + 0.4, -2.2), { x: 0.3, z: -1.75 }, VIEWS.fridge, [v(-1.42, EGG_Y - 0.02, -2.92), v(1.42, MILK_Y - 0.04, -2.28)])
+      milk: make("milk", "milk", milk, v(0, 2.0, -2.3), { x: -0.2, z: -1.75 }, dairyServe, VIEWS.fridge, [v(-1.42, MILK_Y - 0.02, -2.92), v(1.42, MILK_Y + 0.62, -2.28)]),
+      eggs: make("eggs", "egg", eggs, v(0, EGG_Y + 0.4, -2.2), { x: 0.3, z: -1.75 }, dairyServe, VIEWS.fridge, [v(-1.42, EGG_Y - 0.02, -2.92), v(1.42, MILK_Y - 0.04, -2.28)])
     };
   }
 

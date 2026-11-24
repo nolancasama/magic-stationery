@@ -14,8 +14,8 @@
  */
 import { audio } from "../audio/audio.ts";
 import { PHRASES, type PhraseId } from "../speech/phrases.ts";
-import { judgeSpeech } from "../speech/match.ts";
-import { HARD_ERRORS, recognition, type ListenHandle } from "../speech/recognition.ts";
+import { isSpeechPrefix, judgeSpeech } from "../speech/match.ts";
+import { HARD_ERRORS, recognition, type ListenHandle, type RecognitionTiming } from "../speech/recognition.ts";
 import { tts } from "../speech/tts.ts";
 import { portraitOf, voiceOf, type Speaker } from "./dialogue.ts";
 import { h } from "./dom.ts";
@@ -39,9 +39,10 @@ export interface AskSpec {
 /** Quiet time after "eight..." before the shorter answer is taken (the child may still say "thirty"). */
 const SETTLE_MS = 3000;
 /** Quiet time after a finished sentence that matched nothing before it counts as said. */
-const ENDPOINT_MS = 1500;
-/** A continuation session (the browser stopped listening mid-answer) waits this long for more. */
+const ENDPOINT_MS = 1000;
+/** Time to continue a recognisable prefix, including after an early browser endpoint. */
 const CONTINUE_MS = 3000;
+const SUCCESS_MS = 200;
 
 export interface AskEnv {
   micAllowed(): boolean;
@@ -49,6 +50,24 @@ export interface AskEnv {
 }
 
 type Mode = "speech" | "tap";
+
+type SpeechTiming = RecognitionTiming | "press" | "firstInterim" | "firstMatchingInterim" | "final" | "judgeDone" | "accepted" | "promptResolved" | "npcLineStart";
+export type SpeechTimings = Partial<Record<SpeechTiming, number>>;
+
+declare global {
+  interface Window {
+    __speechDebug?: boolean;
+    __speechTimings?: SpeechTimings;
+  }
+}
+
+/** Debug timestamps in milliseconds on the performance.now() clock, for the last mic attempt. */
+export function markSpeechTiming(timings: SpeechTimings | undefined, mark: SpeechTiming) {
+  if (!timings || (mark !== "judgeDone" && timings[mark] !== undefined)) return;
+  const now = performance.now();
+  timings[mark] = now;
+  if (window.__speechDebug) console.debug("[speech]", mark, now - (timings.press ?? now));
+}
 
 export class AskPrompt {
   readonly el: HTMLDivElement;
@@ -68,14 +87,16 @@ export class AskPrompt {
   private handle: ListenHandle | null = null;
   private blocked = false;
   private lastPress = 0;
-  private best: { id: PhraseId; heard: string; pending?: boolean } | null = null;
-  private sawSpeech = false;
-  private wrongHeard = "";
+  private sessionId: symbol | null = null;
+  private pending: { id: PhraseId; heard: string } | null = null;
+  private partial = "";
+  private lastHeard = "";
   /** Our own end-of-answer timer (continuous listening has no browser endpoint). */
   private quietTimer = 0;
+  private acceptTimer = 0;
   private stoppedByUs = false;
-  private continued = false;
   private hintEl: HTMLDivElement;
+  private timings?: SpeechTimings;
   /** Test hook. */
   onSession: ((state: string) => void) | null = null;
 
@@ -85,7 +106,7 @@ export class AskPrompt {
     this.cards = h("div", { class: "cards" });
     this.mic = h("button", { class: "mic", "aria-label": "Microphone", "data-test": "mic" }, "🎤");
     this.meter = h("i");
-    this.status = h("div", { class: "status" });
+    this.status = h("div", { class: "status", role: "status" });
     this.heard = h("div", { class: "heard" });
     this.hintEl = h("div", { class: "ask-hint hidden", "data-test": "ask-hint" });
     this.el = h(
@@ -102,7 +123,7 @@ export class AskPrompt {
     window.addEventListener("keydown", (e) => {
       if (e.key === " " && this.resolve && this.mode === "speech") {
         e.preventDefault();
-        this.press();
+        if (!e.repeat) this.press();
       }
     });
     parent.appendChild(this.el);
@@ -121,6 +142,7 @@ export class AskPrompt {
     this.misses = 0;
     this.silent = 0;
     this.modelled = false;
+    this.heard.textContent = "";
     this.mode = this.speechUsable() ? "speech" : "tap";
     if (spec.question) {
       this.q.innerHTML = `<span class="mini">${portraitOf(spec.question.who)}</span><span>${spec.question.en.replace(/\*\*/g, "")}</span>`;
@@ -172,7 +194,8 @@ export class AskPrompt {
   }
 
   private setStatus(en: string, ja?: string) {
-    this.status.innerHTML = `${en}${ja && this.env.japanese() ? ` <span class="ja">${ja}</span>` : ""}`;
+    const html = `${en}${ja && this.env.japanese() ? ` <span class="ja">${ja}</span>` : ""}`;
+    if (this.status.innerHTML !== html) this.status.innerHTML = html;
   }
 
   /** The spec's tip, with a button that plays the sentence clearly. */
@@ -196,9 +219,11 @@ export class AskPrompt {
   }
 
   private async speakModel(text: string) {
-    this.handle?.abort();
-    this.handle = null;
-    this.mic.className = "mic";
+    if (this.acceptTimer) return;
+    if (this.sessionId) {
+      this.clearSession();
+      this.setStatus("Tap the mic and speak!", "マイクを おして、えいごで いってね！");
+    }
     audio.duck(true);
     await tts.speak(text, voiceOf("narrator"));
     audio.duck(false);
@@ -208,14 +233,18 @@ export class AskPrompt {
     if (this.modelled || !this.spec) return;
     this.modelled = true;
     const texts = this.spec.options.map((id) => PHRASES[id].en);
+    const prompt = this.promptCount;
     this.mic.disabled = true;
-    for (const t of texts) await this.speakModel(t);
+    for (const t of texts) {
+      await this.speakModel(t);
+      if (prompt !== this.promptCount || !this.resolve) return;
+    }
     this.mic.disabled = false;
   }
 
   private tap(id: PhraseId, card: HTMLElement) {
     const spec = this.spec;
-    if (!spec || this.mode !== "tap") return;
+    if (!spec || !this.resolve || this.mode !== "tap") return;
     const ok = spec.kind === "choice" || id === spec.options[0];
     if (!ok) {
       audio.hmm();
@@ -232,27 +261,36 @@ export class AskPrompt {
   }
 
   private press() {
-    if (!this.spec || this.mode !== "speech" || this.mic.disabled) return;
+    if (!this.resolve || this.mode !== "speech" || this.mic.disabled) return;
+    if (!this.speechUsable()) return this.forceTap();
     const now = performance.now();
-    if (now - this.lastPress < 350) return;
-    this.lastPress = now;
-    if (this.handle) {
-      // Pressing again while listening means "I'm done".
-      this.handle.stop();
-      this.mic.className = "mic processing";
-      this.setStatus("Checking…", "チェックちゅう…");
+    if (this.sessionId) {
+      // A deliberate second press means "I'm done". Ignore accidental double-clicks.
+      if (now - this.lastPress >= 350) this.handle?.stop();
       return;
     }
+    this.lastPress = now;
+    this.timings = window.__speechDebug || window.__speechTimings ? (window.__speechTimings = {}) : undefined;
+    markSpeechTiming(this.timings, "press");
+    this.pending = null;
+    this.partial = "";
+    this.lastHeard = "";
+    this.heard.textContent = "";
     this.startSession();
+  }
+
+  private clearQuiet() {
+    window.clearTimeout(this.quietTimer);
+    this.quietTimer = 0;
   }
 
   /** End the answer ourselves after a quiet spell (continuous listening). */
   private armQuiet(ms: number) {
-    window.clearTimeout(this.quietTimer);
+    if (this.stoppedByUs) return;
+    this.clearQuiet();
+    const session = this.sessionId;
     this.quietTimer = window.setTimeout(() => {
-      if (!this.handle) return;
-      this.stoppedByUs = true;
-      this.handle.stop();
+      if (session === this.sessionId) this.handle?.stop();
     }, ms);
   }
 
@@ -265,93 +303,133 @@ export class AskPrompt {
    */
   private startSession(prefix = "") {
     const spec = this.spec as AskSpec;
+    const session = (this.sessionId = Symbol());
+    const current = () => session === this.sessionId;
+    const timings = this.timings;
     tts.cancel();
     audio.silence(true);
-    if (!prefix) {
-      this.best = null;
-      this.sawSpeech = false;
-      this.wrongHeard = "";
-      this.heard.textContent = "";
-      this.continued = false;
-    }
     this.stoppedByUs = false;
     this.mic.className = "mic listening";
-    this.setStatus(prefix ? "Keep going…" : "Listening… Take your time!", prefix ? "つづけて どうぞ…" : "きいているよ… ゆっくりで だいじょうぶ！");
+    this.setStatus("Listening…", "きいているよ…");
     this.onSession?.(prefix ? "continue" : "listening");
+    if (!current()) return;
     const options = spec.options.map((id) => PHRASES[id]);
     let hardError = "";
-    this.handle = recognition.listen(
+    let speechEnded = false;
+    const handle = recognition.listen(
       {
+        onTiming: (mark) => {
+          if (!current()) return;
+          if (mark === "speechStart") speechEnded = false;
+          markSpeechTiming(timings, mark);
+        },
         onResult: (raw, isFinal) => {
-          const alts = prefix ? raw.map((a) => `${prefix} ${a}`.trim()) : raw;
-          if (raw.some((a) => a.trim())) this.sawSpeech = true;
-          if (alts[0]?.trim()) this.heard.textContent = `“${alts[0].trim()}…”`;
+          if (!current()) return;
+          if (!this.env.micAllowed()) return this.forceTap();
+          const spoken = raw.map((a) => a.trim()).filter(Boolean);
+          if (!spoken.length) return;
+          markSpeechTiming(timings, isFinal ? "final" : "firstInterim");
+          const alts = prefix ? spoken.map((a) => `${prefix} ${a}`) : spoken;
+          this.setStatus("I hear you…", "きこえているよ…");
+          const heard = alts[0];
+          const changed = this.lastHeard !== heard;
+          this.lastHeard = heard;
+          this.heard.textContent = `“${heard}…”`;
           const j = judgeSpeech(alts, options);
-          if (j.kind === "match" && !j.pending) {
-            this.best = { id: j.id, heard: j.heard };
-            this.handle?.abort();
-            this.endSession("");
-            return;
-          }
+          markSpeechTiming(timings, "judgeDone");
+          if (!isFinal && j.kind === "match") markSpeechTiming(timings, "firstMatchingInterim");
+          if (j.kind === "match" && !j.pending) return this.acceptSpeech(j.id, j.heard);
+
+          const wasWaiting = !!(this.pending || this.partial);
+          this.pending = null;
+          this.partial = "";
           if (j.kind === "match") {
             // "eight..." — maybe "thirty" is coming. Keep listening a little.
-            this.best = { id: j.id, heard: j.heard, pending: true };
-            this.armQuiet(prefix ? CONTINUE_MS : SETTLE_MS);
-            return;
-          }
-          if (alts[0]) this.wrongHeard = alts[0];
-          if (isFinal) this.armQuiet(this.best?.pending ? SETTLE_MS : ENDPOINT_MS);
+            this.pending = j;
+            if (changed || !this.quietTimer || !wasWaiting) this.armQuiet(SETTLE_MS);
+          } else if (isSpeechPrefix(heard, options)) {
+            this.partial = heard;
+            if (changed || !this.quietTimer || !wasWaiting) this.armQuiet(CONTINUE_MS);
+          } else if (isFinal || speechEnded) {
+            if (changed || !this.quietTimer || wasWaiting) this.armQuiet(ENDPOINT_MS);
+          } else this.clearQuiet();
+        },
+        onSpeechEnd: () => {
+          if (!current()) return;
+          speechEnded = true;
+          if (this.lastHeard && !this.pending && !this.partial && !this.quietTimer) this.armQuiet(ENDPOINT_MS);
+        },
+        onStopping: () => {
+          if (!current()) return;
+          this.stoppedByUs = true;
+          this.clearQuiet();
+          this.mic.className = "mic processing";
+          this.setStatus("Checking…", "チェックちゅう…");
         },
         onError: (err) => {
-          if (HARD_ERRORS.has(err)) hardError = err;
+          if (current() && HARD_ERRORS.has(err)) hardError = err;
         },
-        onEnd: () => this.endSession(hardError),
+        onEnd: () => {
+          if (current()) this.endSession(hardError, !!prefix);
+        },
         onActivity: (a) => {
-          this.meter.style.width = a.speech ? "100%" : a.sound ? "55%" : a.audio ? "12%" : "0";
+          if (current()) this.meter.style.width = a.speech ? "100%" : a.sound ? "55%" : a.audio ? "12%" : "0";
         }
       },
       prefix ? CONTINUE_MS + 4000 : 9000,
       true
     );
-    // A continuation that hears nothing more takes what was already said.
-    if (prefix) this.armQuiet(CONTINUE_MS);
-  }
-
-  private endSession(hardError: string) {
-    if (!this.handle && !this.best) return;
-    window.clearTimeout(this.quietTimer);
-    // The browser stopped listening right after "eight...": listen once more and join the two parts.
-    if (this.best?.pending && !this.stoppedByUs && !this.continued && !hardError && this.handle) {
-      this.continued = true;
-      this.handle = null;
-      this.startSession(this.best.heard);
+    if (!current()) {
+      handle.abort();
       return;
     }
+    this.handle = handle;
+    if (prefix && !this.quietTimer) this.armQuiet(CONTINUE_MS);
+  }
+
+  private clearSession() {
+    this.sessionId = null;
+    this.clearQuiet();
+    this.handle?.abort();
     this.handle = null;
     audio.silence(false);
     this.meter.style.width = "0";
     this.mic.className = "mic";
-    const spec = this.spec;
-    if (!spec || !this.resolve) return;
-    if (this.best) {
-      this.onSession?.("match");
-      this.heard.textContent = `“${this.best.heard}”`;
-      const id = this.best.id;
-      audio.sparkle(5);
-      const card = this.cards.querySelector(`[data-phrase="${id}"]`);
-      card?.classList.add("good");
-      window.setTimeout(() => this.finish(id), 450);
-      return;
+  }
+
+  private acceptSpeech(id: PhraseId, heard: string) {
+    this.clearSession();
+    markSpeechTiming(this.timings, "accepted");
+    this.mic.disabled = true;
+    this.setStatus("Great!", "いいね！");
+    this.heard.textContent = `“${heard}”`;
+    audio.sparkle(5);
+    this.cards.querySelector(`[data-phrase="${id}"]`)?.classList.add("good");
+    this.acceptTimer = window.setTimeout(() => this.finish(id), SUCCESS_MS);
+    this.onSession?.("match");
+  }
+
+  private endSession(hardError: string, continued: boolean) {
+    const micAllowed = this.env.micAllowed();
+    if (this.resolve && !hardError && micAllowed) {
+      const prefix = this.pending?.heard ?? this.partial;
+      if (prefix && !this.stoppedByUs && !continued) {
+        this.clearSession();
+        this.startSession(prefix);
+        return;
+      }
+      if (this.pending) return this.acceptSpeech(this.pending.id, this.pending.heard);
     }
+    this.clearSession();
+    if (!this.resolve) return;
     if (hardError) {
       this.blocked = true;
-      this.mode = "tap";
+      this.forceTap();
       this.onSession?.("blocked");
-      this.render();
-      this.setTapStatus();
       return;
     }
-    if (!this.sawSpeech) {
+    if (!micAllowed) return this.forceTap();
+    if (!this.lastHeard) {
       this.silent++;
       this.onSession?.("silence");
       if (this.silent >= 2 && !this.modelled) {
@@ -362,25 +440,25 @@ export class AskPrompt {
     }
     this.misses++;
     this.onSession?.("miss");
-    this.heard.textContent = this.wrongHeard ? `I heard: “${this.wrongHeard}”` : "";
+    this.heard.textContent = `I heard: “${this.lastHeard}”`;
     this.showHint(true);
     audio.hmm();
-    if (this.misses === 1) this.setStatus("Almost! Try again!", "おしい！ もういちど！");
+    if (this.misses === 1) this.setStatus("Try again!", "もういちど！");
     else if (this.misses === 2) {
-      this.setStatus("Listen, then try again!", "よく きいて、もういちど！");
+      this.setStatus("Try again! Listen first.", "もういちど！ まず きいてね。");
       this.modelled = false;
       void this.modelSentence();
     } else {
       this.mode = "tap";
       this.render();
-      this.setStatus("Good try! Tap the sentence and say it.", "がんばったね！ ぶんを タップして、いってみよう。");
+      this.setStatus("Try again! Tap the sentence and say it.", "もういちど！ ぶんを タップして、いってみよう。");
     }
   }
 
   /** Test hook: feed a transcript as if the recogniser heard it. */
   simulate(transcript: string): boolean {
     const spec = this.spec;
-    if (!spec || !this.resolve) return false;
+    if (!spec || !this.resolve || this.acceptTimer) return false;
     const j = judgeSpeech([transcript], spec.options.map((id) => PHRASES[id]));
     if (j.kind === "match") {
       this.finish(j.id);
@@ -391,18 +469,25 @@ export class AskPrompt {
 
   /** Test hook: tap mode always reachable. */
   forceTap() {
+    if (!this.resolve || this.acceptTimer) return;
+    if (this.sessionId) this.clearSession();
     this.mode = "tap";
     this.render();
+    this.setTapStatus();
   }
 
   private finish(id?: PhraseId) {
-    window.clearTimeout(this.quietTimer);
-    this.handle?.abort();
-    this.handle = null;
-    audio.silence(false);
+    window.clearTimeout(this.acceptTimer);
+    this.acceptTimer = 0;
+    this.clearSession();
+    this.mic.disabled = false;
     const r = this.resolve;
     this.resolve = null;
     this.el.classList.add("hidden");
-    if (r && id) r(id);
+    if (r && id) {
+      markSpeechTiming(this.timings, "promptResolved");
+      r(id);
+    }
+    this.timings = undefined;
   }
 }

@@ -1,7 +1,7 @@
 /**
  * Thin wrapper around the browser SpeechRecognition API (Chrome / Chromebook).
  * One press = one bounded listening session. The caller judges results.
- * Ported unchanged in behaviour from monster-island (classroom-tested).
+ * Browser session management is based on monster-island (classroom-tested).
  */
 
 interface RecAlternative {
@@ -49,9 +49,13 @@ export interface ListenHandlers {
   /** Called exactly once when the session is over. */
   onEnd(): void;
   onActivity?(activity: ListenActivity): void;
+  onSpeechEnd?(): void;
   /** The cap or caller has requested a graceful stop. */
   onStopping?(): void;
+  onTiming?(event: RecognitionTiming): void;
 }
+
+export type RecognitionTiming = "recognitionStart" | "audioStart" | "soundStart" | "speechStart";
 
 export interface ListenActivity {
   sound: boolean;
@@ -155,15 +159,29 @@ export const recognition = {
       if (!ended) h.onError(e.error);
     };
     rec.onend = () => end();
-    rec.onaudiostart = () => updateActivity({ audio: true });
+    rec.onaudiostart = () => {
+      if (!ended) h.onTiming?.("audioStart");
+      updateActivity({ audio: true });
+    };
     rec.onaudioend = () => updateActivity({ audio: false, sound: false, speech: false });
-    rec.onsoundstart = () => updateActivity({ sound: true });
+    rec.onsoundstart = () => {
+      if (!ended) h.onTiming?.("soundStart");
+      updateActivity({ sound: true });
+    };
     rec.onsoundend = () => updateActivity({ sound: false, speech: false });
-    rec.onspeechstart = () => updateActivity({ sound: true, speech: true });
-    rec.onspeechend = () => updateActivity({ speech: false });
+    rec.onspeechstart = () => {
+      if (!ended) h.onTiming?.("speechStart");
+      updateActivity({ sound: true, speech: true });
+    };
+    rec.onspeechend = () => {
+      if (ended) return;
+      updateActivity({ speech: false });
+      h.onSpeechEnd?.();
+    };
     // Safety cap: some recognisers never fire onend.
     timer = window.setTimeout(() => handle.stop(), maxMs);
     try {
+      h.onTiming?.("recognitionStart");
       rec.start();
     } catch {
       h.onError("start-failed");

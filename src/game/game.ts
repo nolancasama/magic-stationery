@@ -29,7 +29,7 @@ import { DrawPanel } from "../ui/drawPanel.ts";
 import { Hud } from "../ui/hud.ts";
 import { placeLabel, settingsDialog } from "../ui/screens.ts";
 import { PENNY_SPOT, StoreArea } from "../world/areas/store.ts";
-import type { RoomArea, Slot, Spot, View } from "../world/areas/room.ts";
+import { createDoorHotspot, doorInsideX, positionDoorHotspot, type RoomArea, type Slot, type Spot, type View } from "../world/areas/room.ts";
 import { ClassroomArea } from "../world/areas/classroom.ts";
 import { ZooArea } from "../world/areas/zoo.ts";
 import { MarketArea } from "../world/areas/market.ts";
@@ -42,6 +42,7 @@ import { Engine } from "../world/engine.ts";
 import { worldUniforms } from "../world/materials.ts";
 import { animate, arc, ease, wait } from "../world/tween.ts";
 import { CAST, type CastId } from "./cast.ts";
+import { DOOR_CLICK_DISTANCE, updateDoorExit, type DoorExitState } from "./doorExit.ts";
 import { isBuilt, isOpen } from "./levels/index.ts";
 import {
   GLYPH_CHARS,
@@ -205,10 +206,15 @@ export class Game {
   private marker: THREE.Vector3 | null = null;
   private slotWait: { ids: string[]; resolve: (id: string) => void } | null = null;
   private placeWait: { resolve: (id: PlaceId) => void } | null = null;
+  private townLoopStarted = false;
   private labels = new Map<PlaceId, HTMLDivElement>();
   private ambient = new Set<NpcId>();
   private ambientBusy = new Set<NpcId>();
   private fade: HTMLDivElement;
+  private readonly doorHotspot = createDoorHotspot();
+  private doorAnchor: THREE.Vector3 | null = null;
+  private doorExit: DoorExitState = "ready";
+  private doorWalk: Promise<boolean> | null = null;
   scripting = false;
   /** Lines and asks seen this session (first meeting of a phrase is modelled aloud). */
   private modelled = new Set<string>();
@@ -400,6 +406,7 @@ export class Game {
     if (this.inLevelRoom) {
       this.room.update(t);
       for (const c of [this.player, ...Object.values(this.cast)]) if (c.root.parent === this.room.scene) c.update(dt);
+      this.updateDoorBubble();
     } else if (this.area === "town") {
       this.town.update(t);
       this.player.update(dt);
@@ -427,6 +434,46 @@ export class Game {
     if (!this.area || this.draw.isOpen || this.asker.open) return false;
     if (this.area === "town") return !!this.placeWait;
     return !this.scripting || !!this.slotWait;
+  }
+
+  private get canUseDoor(): boolean {
+    return this.townLoopStarted && this.inLevelRoom && !this.scripting &&
+      !this.draw.isOpen && !this.asker.open && this.fade.style.opacity === "0";
+  }
+
+  private doorDistance(): number {
+    const { door } = this.room;
+    const { x, z } = this.player.position;
+    return Math.hypot(x - doorInsideX(door), z - door.z);
+  }
+
+  private updateDoorBubble() {
+    const enabled = this.canUseDoor;
+    if (!enabled) this.doorWalk = null;
+    if (!this.doorWalk) this.doorExit = updateDoorExit(this.doorExit, this.doorDistance(), enabled);
+    const anchor = this.doorExit === "open" ? this.doorAnchor : null;
+    this.hud.setDoorBubble(anchor ? this.engine.toScreen(anchor) : null);
+  }
+
+  private async clickDoor() {
+    const distance = this.doorDistance();
+    this.doorExit = updateDoorExit(this.doorExit, distance, true, "click");
+    if (this.doorExit === "dismissed") return;
+    if (distance <= DOOR_CLICK_DISTANCE) {
+      this.player.stop();
+      this.doorWalk = null;
+    } else {
+      if (this.doorWalk) return;
+      const { door } = this.room;
+      const walk = this.player.go(doorInsideX(door), door.z);
+      this.doorWalk = walk;
+      const arrived = await walk;
+      if (this.doorWalk !== walk) return;
+      this.doorWalk = null;
+      // go() also resolves if a waypoint was blocked. Check the actual arrival.
+      if (!arrived || !this.canUseDoor || this.doorDistance() > 0.2) return;
+    }
+    this.updateDoorBubble();
   }
 
   /** Keys -> a direction on the floor, relative to the camera (W = away from the camera). */
@@ -516,6 +563,12 @@ export class Game {
 
   private bindInput() {
     this.bindKeys();
+    this.hud.onDoorExit = (yes) => {
+      if (!this.canUseDoor || this.doorExit !== "open") return;
+      this.doorExit = updateDoorExit(this.doorExit, this.doorDistance(), true, "dismiss");
+      this.hud.setDoorBubble(null);
+      if (yes) this.hud.townBtn.click();
+    };
     const canvas = this.engine.canvas;
     canvas.addEventListener("pointerdown", (e) => {
       audio.unlock();
@@ -525,16 +578,24 @@ export class Game {
     });
     canvas.addEventListener("pointermove", (e) => {
       if (!this.area) return;
-      const objs = this.area === "town" ? this.town.pickables : this.room.pickables;
+      const objs = this.area === "town" ? this.town.pickables : this.roomPickables();
       const hit = this.engine.pick(e.clientX, e.clientY, objs);
       canvas.style.cursor = hit ? "pointer" : "default";
     });
   }
 
+  private roomPickables() {
+    return this.canUseDoor ? [...this.room.pickables, this.doorHotspot] : this.room.pickables;
+  }
+
   private clickRoom(x: number, y: number) {
     // A spot the game is waiting for wins over any other spot in front of it (desks and chairs overlap).
     const waited = this.slotWait ? this.room.pickables.filter((o) => this.slotWait?.ids.includes(o.userData.slot)) : [];
-    const hit = (waited.length ? this.engine.pick(x, y, waited) : null) ?? this.engine.pick(x, y, this.room.pickables);
+    const hit = (waited.length ? this.engine.pick(x, y, waited) : null) ?? this.engine.pick(x, y, this.roomPickables());
+    if (hit?.object === this.doorHotspot) {
+      void this.clickDoor();
+      return;
+    }
     const id = hit?.object.userData.slot as string | undefined;
     if (id && this.slotWait?.ids.includes(id)) {
       const w = this.slotWait;
@@ -582,6 +643,9 @@ export class Game {
   // ------------------------------------------------------------ places
   async fadeTo(fn: () => void | Promise<void>) {
     this.fade.style.opacity = "1";
+    if (this.doorWalk) this.player.stop();
+    this.doorWalk = null;
+    this.hud.setDoorBubble(null);
     await new Promise((r) => window.setTimeout(r, 470));
     await fn();
     this.fade.style.opacity = "0";
@@ -601,6 +665,8 @@ export class Game {
     this.place = place;
     this.room = this.areaOf(place);
     const room = this.room;
+    this.doorAnchor = positionDoorHotspot(this.doorHotspot, room.door);
+    this.doorExit = "ready";
     this.ambient.clear();
     // People belong to one scene at a time.
     this.player.root.removeFromParent();
@@ -634,6 +700,7 @@ export class Game {
 
   enterTown(from: PlaceId | null) {
     this.area = "town";
+    this.hud.setDoorBubble(null);
     this.engine.setScene(this.town.scene);
     this.town.scene.add(this.effects.points);
     this.ambient.clear();
@@ -704,6 +771,8 @@ export class Game {
   }
 
   waitPlace(): Promise<PlaceId> {
+    // Standalone room previews skip the town loop and have no Home handler.
+    this.townLoopStarted = true;
     return new Promise((resolve) => (this.placeWait = { resolve }));
   }
 
@@ -1311,11 +1380,13 @@ export class Game {
     c.router = (ax, az, bx, bz) => room.nav.route(ax, az, bx, bz);
   }
 
-  async npcEnter(id: NpcId, x: number, z: number, opts: { keepDoor?: boolean; frame?: boolean } = {}) {
+  async npcEnter(id: NpcId, x: number, z: number, opts: { keepDoor?: boolean; frame?: boolean; walkView?: View } = {}) {
     const c = this.cast[id];
     const room = this.room;
     const door = room.door;
     this.ambient.delete(id);
+    // A suspended route can resume when walkTo resolves its pending waypoint.
+    c.stop();
     this.inRoom(c);
     c.place(door.outsideX, door.z, -Math.PI / 2);
     // The doorway is outside the walkable room: no collision until they are inside.
@@ -1324,9 +1395,10 @@ export class Game {
     if (opts.frame !== false) this.focus(room.views.door);
     audio.door();
     await animate(0.4, (k) => room.setDoor(ease.out(k)));
-    await c.walkTo(door.x - 0.7, door.z);
+    await c.walkTo(doorInsideX(door), door.z);
     this.inRoom(c);
     if (!opts.keepDoor) void animate(0.5, (k) => room.setDoor(1 - ease.inOut(k)));
+    if (opts.walkView) this.focus(opts.walkView);
     await c.go(x, z);
   }
 
@@ -1334,7 +1406,8 @@ export class Game {
     const c = this.cast[id];
     const room = this.room;
     this.ambient.delete(id);
-    await c.go(room.door.x - 0.7, room.door.z);
+    c.stop();
+    await c.go(doorInsideX(room.door), room.door.z);
     audio.door();
     await animate(0.3, (k) => room.setDoor(ease.out(k)));
     c.collide = null;
@@ -1508,6 +1581,36 @@ export class Game {
   }
 
   // ------------------------------------------------------------ e2e helpers
+  npcFraming(id: NpcId) {
+    const c = this.cast[id];
+    const { x, z } = c.position;
+    const { bounds } = this.gym;
+    const playerHeading = Math.atan2(this.player.position.x - x, this.player.position.z - z);
+    const camera = this.engine.camera;
+    camera.updateMatrixWorld();
+    c.root.updateWorldMatrix(true, true);
+    const { min, max } = new THREE.Box3().setFromObject(c.model);
+    const corner = new THREE.Vector3();
+    const inFrame = [min.x, max.x].every((x) =>
+      [min.y, max.y].every((y) =>
+        [min.z, max.z].every((z) => {
+          corner.set(x, y, z).project(camera);
+          return Math.max(Math.abs(corner.x), Math.abs(corner.y), Math.abs(corner.z)) <= 1;
+        })
+      )
+    );
+    return {
+      inGymScene: c.root.parent === this.gym.scene,
+      inRoomBounds: x >= bounds.minX && x <= bounds.maxX && z >= bounds.minZ && z <= bounds.maxZ,
+      visible: c.root.visible && c.model.visible,
+      inFrame,
+      moving: c.moving,
+      facingPlayer: Math.cos(c.heading - playerHeading) > 0.9,
+      x,
+      z
+    };
+  }
+
   stats() {
     return this.engine.stats();
   }

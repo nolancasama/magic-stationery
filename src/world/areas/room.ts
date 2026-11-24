@@ -3,7 +3,7 @@
  * controller: a diorama scene with a walkable floor, display slots the child
  * restores by drawing, a door on the right wall, and a restoration level.
  */
-import type * as THREE from "three";
+import * as THREE from "three";
 import type { Made } from "../../objects/made.ts";
 import type { WordId } from "../../recognition/vocab.ts";
 import type { NavMap, Rect } from "../nav.ts";
@@ -49,6 +49,26 @@ export interface Door {
   x: number;
   z: number;
   outsideX: number;
+}
+
+/** Where a character gets back onto the nav map after crossing the threshold. */
+export function doorInsideX(door: Door): number {
+  return door.x - 0.7;
+}
+
+/** Pick the opening even while the leaf is swung or slid out of the way. */
+export function createDoorHotspot() {
+  return new THREE.Mesh(
+    new THREE.BoxGeometry(0.24, 2.5, 1.4),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+}
+
+/** Place the shared hotspot in the right wall, above the door's nav point. */
+export function positionDoorHotspot(hotspot: THREE.Mesh, door: Door): THREE.Vector3 {
+  hotspot.position.set(door.x + 0.35, 1.25, door.z);
+  hotspot.updateMatrixWorld(true);
+  return hotspot.position.clone().setY(2.6);
 }
 
 export interface RoomArea {

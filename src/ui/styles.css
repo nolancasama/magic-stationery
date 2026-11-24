@@ -70,6 +70,25 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .marker.hidden { display: none; }
 @keyframes bob { 50% { transform: translateY(-10px) scale(1.08); } }
 
+.door-bubble {
+  position: absolute; left: clamp(100px, var(--door-x), calc(100% - 100px)); top: 0;
+  width: 184px; transform: translate(-50%, -100%); padding: 10px 12px;
+  border-radius: 16px; background: var(--panel); box-shadow: var(--shadow);
+  text-align: center; font-size: 15px; font-weight: 800;
+}
+.door-bubble::after {
+  content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 7px solid transparent; border-top-color: var(--panel); border-bottom: 0;
+  pointer-events: none;
+}
+.door-bubble .ja { margin-top: 3px; font-size: 12px; color: var(--ink-soft); }
+.door-bubble-buttons { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
+.door-bubble button {
+  min-width: 58px; min-height: 34px; border: 0; border-radius: 18px;
+  background: #eef0ff; font-size: 15px; font-weight: 800;
+}
+.door-bubble button:first-child { background: var(--pink); }
+
 .place-label {
   position: absolute; transform: translate(-50%, -100%); padding: 6px 12px; border-radius: 12px; background: var(--panel);
   box-shadow: var(--shadow); font-weight: 800; font-size: 15px; text-align: center; white-space: nowrap; pointer-events: none;

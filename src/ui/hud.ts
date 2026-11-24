@@ -15,6 +15,7 @@ export class Hud {
   readonly settingsBtn: HTMLButtonElement;
   readonly soundBtn: HTMLButtonElement;
   readonly toast: HTMLDivElement;
+  private readonly doorBubble: HTMLDivElement;
   private toastTimer = 0;
 
   constructor(parent: HTMLElement, private japanese: () => boolean) {
@@ -30,7 +31,24 @@ export class Hud {
     this.settingsBtn = h("button", { class: "icon-btn", title: "Teacher settings", "aria-label": "Settings", "data-test": "settings" }, "⚙️");
     this.buttons = h("div", { class: "hud-buttons" }, this.townBtn, this.soundBtn, this.settingsBtn);
     this.toast = h("div", { class: "toast hidden" });
-    parent.append(this.place, this.objective, this.marker, this.pen, this.buttons, this.toast);
+    this.doorBubble = h("div", { class: "door-bubble", "data-test": "door-exit", hidden: true, role: "group", "aria-labelledby": "door-exit-question" },
+      h("div", { id: "door-exit-question", "aria-live": "polite" }, "Do you want to leave?"),
+      h("div", { class: "ja" }, "そとに でますか？"),
+      h("div", { class: "door-bubble-buttons" },
+        h("button", { type: "button", "data-test": "door-exit-yes", onclick: () => this.onDoorExit?.(true) }, "Yes"),
+        h("button", { type: "button", "data-test": "door-exit-no", onclick: () => this.onDoorExit?.(false) }, "No")
+      )
+    );
+    parent.append(this.place, this.objective, this.marker, this.pen, this.buttons, this.toast, this.doorBubble);
+  }
+
+  onDoorExit: ((yes: boolean) => void) | null = null;
+
+  setDoorBubble(p: { x: number; y: number } | null) {
+    this.doorBubble.hidden = !p;
+    if (!p) return;
+    this.doorBubble.style.setProperty("--door-x", p.x + "px");
+    this.doorBubble.style.top = p.y + "px";
   }
 
   setPlace(en: string, ja: string, done: number, total: number) {

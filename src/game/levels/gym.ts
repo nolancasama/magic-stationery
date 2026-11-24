@@ -57,6 +57,7 @@ export async function runGym(g: Game) {
 
 function player(g: Game, id: NpcId, x: number, z: number) {
   const c = g.cast[id];
+  c.stop();
   g.inRoom(c);
   c.place(x, z, Math.PI);
   g.startAmbient(id);
@@ -73,11 +74,16 @@ async function drawSlot(g: Game, id: GymSlotId, objective: [string, string], opt
 
 async function visit(g: Game, id: NpcId, x: number, z: number) {
   const c = g.cast[id];
-  await g.npcEnter(id, x, z);
+  g.focus(VIEWS.door, true);
+  await g.npcEnter(id, x, z, { frame: false, walkView: VIEWS.overview });
   await g.player.go(x + 0.9, z + 0.3);
   c.faceTo(g.player.position.x, g.player.position.z);
   g.player.faceTo(c.position.x, c.position.z);
-  g.focus(g.talkView(g.player, c));
+  const view = g.talkView(g.player, c);
+  // Keep the visitor's feet in the shot when the dialogue panel comes up.
+  view.pos.lerp(view.look, -0.2);
+  g.focus(view, true);
+  await wait(0.35);
   c.emote("wave", 1.2);
 }
 
@@ -404,7 +410,9 @@ async function stepFestival(g: Game) {
   })();
   for (const id of ["ken", "yui", "taro"] as NpcId[]) {
     g.stopAmbient(id);
-    g.inRoom(g.cast[id]);
+    const c = g.cast[id];
+    c.stop();
+    g.inRoom(c);
   }
   await Promise.all([g.cast.ken.go(-0.9, 1.9), g.cast.yui.go(0.0, 2.1), g.cast.taro.go(0.9, 1.9), g.player.go(0.0, 1.2)]);
   for (const c of [g.cast.ken, g.cast.yui, g.cast.taro, g.player]) c.faceTo(0, 0.3);

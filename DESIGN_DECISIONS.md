@@ -352,3 +352,34 @@ user's "Claude directly" work).
   equipment between the camera and the court.
 - **Not run yet:** like Level 4, no test or playthrough has executed this level; the room was judged from
   screenshots (erased, restored, hoops, racket wall, goal, ball cart).
+
+## 2026-11-24 — Fix pass: basket loop, speech latency, arms, crowding, doors, Taro, signs (routed; Codex implemented)
+
+- **Basket "My basket is empty" loop — count first, then speak.** Root cause was the design, not a race: the
+  "Here you are." prompt opened while the child also had to click the crate N times, so a child who spoke first
+  got count 0 → "My basket is empty!" until the magic filled it on the third try. Now counting and speaking are
+  two phases: a visible "n / N" counter while clicking, the prompt opens only when the basket is full, so the
+  first valid "Here you are." always advances. Idle 8 s → the customer says "Click the apples, please!"; a
+  second idle → the magic pen counts the rest. Pure state in `levels/counting.ts`.
+  *Rejected:* keeping the simultaneous prompt and auto-filling on speech (removes the counting lesson).
+- **Grocer serves from behind/beside the display:** per-slot `serve` positions in the market area data; Mr.
+  Green walks the aisle behind the checkout (`GREEN_AISLE`) to reach them.
+- **Speech:** measured with the scripted recogniser, the app added ~750 ms after a clean match; now ~500 ms
+  (success hold 450 → 200 ms, endpoint 1500 → 1000 ms). Settling after a prefix ("eight…") only when a longer
+  valid option exists; a recognised sentence prefix keeps listening (pauses are not misses). Status line:
+  Listening… / I hear you… / Great! / Try again!. Session-id guard: one resolution per prompt. Real Chromebook
+  engine latency is not measurable here and is likely most of what remains.
+- **Arms:** one shared clamp keeps each arm outside the torso using the rig's own shirt/waist/skirt geometry
+  and held-prop bounds (no blanket widening; rest poses stay close). Tested for every cast member and pose.
+- **People don't overlap:** lightweight O(n²) separation inside `characters.ts` (≤ ~10 people): walkers steer
+  round others, late arrivals at a shared spot stop at a free point, standing overlaps ease apart through
+  collision-checked steps; the player and seated people are never pushed; personal space ≤ 0.83 m so
+  conversations at ~0.85 m are untouched. *Rejected:* a physics engine (Chromebook cost).
+- **Leaving by the door:** click the door (walk there if far) or walk up to it → "Do you want to leave?" Yes / No,
+  with hysteresis (No keeps it shut until 1.6 m away). Yes uses the 🏠 handler. Only when no level script is
+  running (the 🏠 already refuses mid-level), never while drawing or speaking.
+- **Taro invisible in the gym:** a route left over from the supermarket resumed when his doorway walk ended and
+  stranded him at the outside spawn. `npcEnter`/`npcLeave` now stop any pending movement first (shared fix for
+  everyone who moves between rooms); the camera frames the visitor before dialogue.
+- **Town signs** derive position from their facade; supermarket facade raised and gym fascia deepened to fit.
+- **Soccer cart:** internal dividers removed; wire bars on the long walls only; ball anchors refitted inside.

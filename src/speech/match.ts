@@ -111,8 +111,22 @@ export function couldGrow(text: string, matched: Phrase, options: readonly Phras
     if (!t || t.m !== null) return false;
     return options.some((o) => o !== matched && o.time && o.time[0] === t.h && o.time[1] !== 0);
   }
-  // A key phrase whose keys are all part of a longer option.
-  return options.some((o) => o !== matched && !o.time && o.keys.length > matched.keys.length && matched.keys.every((g) => o.keys.includes(g)));
+  const words = heardWords(text);
+  return options.some((o) => o !== matched && !o.time && o.keys.length > matched.keys.length &&
+    !o.forbid?.some((w) => words.has(w)) &&
+    matched.keys.every((group) => o.keys.some((other) => group.every((word) => other.includes(word)))));
+}
+
+/** A recognisable start of a sentence that hasn't supplied all its keys yet. */
+export function isSpeechPrefix(text: string, options: readonly Phrase[]): boolean {
+  const tokens = tokenize(text);
+  if (!tokens.length) return false;
+  const time = options.some((p) => p.time) ? parseTime(text) : null;
+  return options.some((p) => {
+    if (p.time && time && time.m === null && time.h === p.time[0] && p.time[1] > 0) return true;
+    const target = tokenize(p.en);
+    return tokens.length < target.length && tokens.every((token, i) => token === target[i]);
+  });
 }
 
 export type Judgement =

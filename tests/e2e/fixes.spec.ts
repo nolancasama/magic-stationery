@@ -8,6 +8,7 @@
  * - the shopkeeper's head turning towards the player from different sides.
  */
 import { expect, test, type Page } from "@playwright/test";
+import type { AskSpec } from "../../src/ui/ask.ts";
 
 type Step = { at: number; text?: string; final?: boolean; end?: boolean };
 
@@ -24,9 +25,9 @@ async function installFakeSpeech(page: Page) {
       onend: (() => void) | null = null;
       onaudiostart: (() => void) | null = null;
       onaudioend = null;
-      onsoundstart = null;
+      onsoundstart: (() => void) | null = null;
       onsoundend = null;
-      onspeechstart = null;
+      onspeechstart: (() => void) | null = null;
       onspeechend = null;
       private timers: number[] = [];
       private done = false;
@@ -37,11 +38,17 @@ async function installFakeSpeech(page: Page) {
         const script = w.__speech.shift() ?? [];
         const results: { transcript: string; isFinal: boolean }[] = [];
         this.onaudiostart?.();
+        let speaking = false;
         for (const s of script) {
           this.timers.push(
             window.setTimeout(() => {
               if (this.done) return;
               if (s.end) return this.finish();
+              if (s.text && !speaking) {
+                speaking = true;
+                this.onsoundstart?.();
+                this.onspeechstart?.();
+              }
               const last = results[results.length - 1];
               if (last && !last.isFinal) results.pop();
               results.push({ transcript: s.text ?? "", isFinal: !!s.final });
@@ -74,6 +81,10 @@ async function installFakeSpeech(page: Page) {
 
 interface Api {
   game: {
+    ask(spec: AskSpec): Promise<string>;
+    say(who: "penny", en: string): Promise<void>;
+    dialogue: { onSpeaking: ((who: string, speaking: boolean) => void) | null };
+    save: { settings: { mic: boolean } };
     asker: { ask(spec: unknown): Promise<string> };
     player: { position: { x: number; z: number }; drive: { x: number; y: number } };
     cast: Record<string, { position: { x: number; z: number }; heading: number; head: { rotation: { y: number } }; lookTarget: unknown }>;
@@ -129,6 +140,66 @@ test.describe("slow time answers (8:30)", () => {
     expect(await answerTime(page, [said([300, "8:30"])])).toBe("itsEightThirty");
   });
 
+  test("an unambiguous interim starts the NPC reply after the success feedback", async ({ page }) => {
+    await openStore(page);
+    const answer = page.evaluate(async (steps) => {
+      const w = window as unknown as Window & { __ms: Api; __speech: Step[][] };
+      w.__speechDebug = true;
+      w.__speech = [steps];
+      const game = w.__ms.game;
+      const status = document.querySelector(".ask .status")!;
+      const states: string[] = [];
+      const observer = new MutationObserver(() => states.push(status.textContent ?? ""));
+      observer.observe(status, { childList: true });
+      const previous = game.dialogue.onSpeaking;
+      const replyStarted = new Promise<void>((resolve) => {
+        game.dialogue.onSpeaking = (who, speaking) => {
+          previous?.(who, speaking);
+          const timings = w.__speechTimings;
+          if (who === "penny" && speaking && timings?.promptResolved !== undefined) {
+            timings.npcLineStart = performance.now();
+            game.dialogue.onSpeaking = previous;
+            resolve();
+          }
+        };
+      });
+      const id = await game.ask({ kind: "choice", options: ["itsEight", "itsEightThirty"], model: false });
+      void game.say("penny", "Thank you!");
+      await replyStarted;
+      observer.disconnect();
+      return { id, states, timings: w.__speechTimings! };
+    }, said([100, "it's", false], [300, "eight thirty", false], [500, "eight thirty"]));
+    await page.click("[data-test=mic]");
+    const { id, states, timings: t } = await answer;
+    expect(id).toBe("itsEightThirty");
+    expect(states.some((state) => state.startsWith("Listening…"))).toBe(true);
+    expect(states.some((state) => state.startsWith("I hear you…"))).toBe(true);
+    expect(states.some((state) => state.startsWith("Great!"))).toBe(true);
+    expect(t.recognitionStart! - t.press!).toBeLessThan(100);
+    expect(t.audioStart).toBeGreaterThanOrEqual(t.recognitionStart!);
+    expect(t.soundStart).toBeGreaterThanOrEqual(t.audioStart!);
+    expect(t.speechStart).toBeGreaterThanOrEqual(t.soundStart!);
+    expect(t.firstInterim).toBeGreaterThanOrEqual(t.speechStart!);
+    expect(t.firstMatchingInterim).toBeGreaterThan(t.firstInterim!);
+    expect(t.accepted! - t.judgeDone!).toBeLessThan(100);
+    expect(t.promptResolved! - t.accepted!).toBeGreaterThanOrEqual(195);
+    expect(t.promptResolved! - t.accepted!).toBeLessThan(400);
+    expect(t.npcLineStart! - t.promptResolved!).toBeLessThan(100);
+    expect(t.final).toBeUndefined();
+  });
+
+  test("a pencil question can continue after a pause and an early browser endpoint", async ({ page }) => {
+    await openStore(page);
+    const answer = page.evaluate(() => {
+      const w = window as unknown as Window & { __ms: Api; __speech: Step[][] };
+      w.__speech = [[{ at: 300, text: "Do you have", final: true }, { at: 600, end: true }], [{ at: 2100, text: "a pencil", final: false }]];
+      return w.__ms.game.asker.ask({ kind: "command", options: ["doYouHavePencil"] });
+    });
+    await page.click("[data-test=mic]");
+    expect(await answer).toBe("doYouHavePencil");
+    expect(await page.evaluate(() => (window as unknown as { __sessions: unknown[] }).__sessions.length)).toBe(2);
+  });
+
   test("slowly, with a short pause and with a longer pause", async ({ page }) => {
     await openStore(page);
     // "eight" (final) ... 1.2 s ... "thirty"
@@ -160,6 +231,7 @@ test.describe("slow time answers (8:30)", () => {
     await expect(page.locator("[data-test=ask-hint]")).toBeHidden();
     await page.click("[data-test=mic]");
     await expect(page.locator("[data-test=ask-hint]")).toBeVisible({ timeout: 6000 });
+    await expect(page.locator(".ask .status")).toContainText("Try again!");
     await expect(page.locator("[data-test=ask-hint]")).toContainText("eight thirty");
     await expect(page.locator("[data-test=ask-hint-listen]")).toBeVisible();
     await page.click("[data-test=mic]");
@@ -184,6 +256,20 @@ test.describe("slow time answers (8:30)", () => {
     await expect(page.locator("[data-test=mic]")).toBeHidden();
     await page.click('.say-card.tappable[data-phrase="itsEightThirty"]');
     expect(await answer).toBe("itsEightThirty");
+  });
+
+  test("the teacher's mic-off setting goes directly to tap cards", async ({ page }) => {
+    await openStore(page);
+    const answer = page.evaluate(() => {
+      const game = (window as unknown as { __ms: Api }).__ms.game;
+      game.save.settings.mic = false;
+      return game.asker.ask({ kind: "command", options: ["doYouHavePencil"] });
+    });
+    await expect(page.locator(".ask .status")).toContainText("Tap the sentence");
+    await expect(page.locator("[data-test=mic]")).toBeHidden();
+    await page.click('.say-card.tappable[data-phrase="doYouHavePencil"]');
+    expect(await answer).toBe("doYouHavePencil");
+    expect(await page.evaluate(() => (window as Window & { __sessions?: unknown[] }).__sessions?.length ?? 0)).toBe(0);
   });
 });
 
@@ -300,4 +386,85 @@ test("the shopkeeper looks at the player from different sides, turning her head 
   const side = await check(-1.4, -1.6);
   expect(side.err).toBeLessThan(0.3);
   expect(Math.abs(side.body)).toBeGreaterThan(0.4);
+});
+
+type DoorTestApi = {
+  game: import("../../src/game/game.ts").Game;
+  clickPlace(id: "store"): boolean;
+  state(): { area: string | null; waiting: string };
+};
+
+async function enterStoreForDoorTest(page: Page) {
+  // Use the normal town loop so Yes dispatches the real Home button handler.
+  await page.addInitScript(() => {
+    localStorage.setItem("ms.save.v1", JSON.stringify({
+      v: 1, started: true,
+      store: { steps: ["pen", "pencils", "shelf", "ken", "crayons", "books", "taro"], slots: {} }
+    }));
+  });
+  await page.goto("/?e2e=1&speed=1");
+  await page.locator("[data-test=continue]").click();
+  await expect.poll(() => page.evaluate(() => (window.__ms as unknown as DoorTestApi).state().waiting), { timeout: 15000 }).toBe("place");
+  expect(await page.evaluate(() => (window.__ms as unknown as DoorTestApi).clickPlace("store"))).toBe(true);
+  await expect(page.locator("[data-test=objective]")).toContainText("The shop is open!", { timeout: 15000 });
+}
+
+const distanceFromDoor = (page: Page) => page.evaluate(() => {
+  const { player, room } = (window.__ms as unknown as DoorTestApi).game;
+  return Math.hypot(player.position.x - (room.door.x - 0.7), player.position.z - room.door.z);
+});
+
+test("walking up to the exit asks again only after walking away, and Yes goes to town", async ({ page }) => {
+  await enterStoreForDoorTest(page);
+  await page.evaluate(() => {
+    const { player, room } = (window.__ms as unknown as DoorTestApi).game;
+    // The aisle along the right wall leaves a clear path for the movement keys.
+    player.place(room.door.x - 0.35, room.door.z - 2);
+  });
+  const bubble = page.locator("[data-test=door-exit]");
+  const walkUntil = async (key: string, check: () => Promise<void>) => {
+    await page.keyboard.down(key);
+    try {
+      await check();
+    } finally {
+      await page.keyboard.up(key);
+    }
+  };
+
+  await expect(bubble).toBeHidden();
+  await walkUntil("ArrowDown", () => expect(bubble).toBeVisible());
+  await expect(bubble).toContainText("Do you want to leave?");
+  if (process.env.MS_SHOTS) await page.screenshot({ path: `${process.env.MS_SHOTS}/door-bubble.png` });
+  await bubble.getByRole("button", { name: "No" }).click();
+  await expect(bubble).toBeHidden();
+  // Walk closer while dismissed to catch a prompt that would reopen on the next frame.
+  await walkUntil("ArrowDown", () => expect.poll(() => distanceFromDoor(page)).toBeLessThan(0.6));
+  await expect(bubble).toBeHidden();
+  await walkUntil("w", () => expect.poll(() => distanceFromDoor(page)).toBeGreaterThan(1.65));
+  await expect(bubble).toBeHidden();
+  await walkUntil("s", () => expect(bubble).toBeVisible());
+  await bubble.getByRole("button", { name: "Yes" }).click();
+  await expect.poll(() => page.evaluate(() => (window.__ms as unknown as DoorTestApi).state().area)).toBe("town");
+  await expect(bubble).toBeHidden();
+});
+
+test("clicking the exit from far away walks to it before asking", async ({ page }) => {
+  await enterStoreForDoorTest(page);
+  const doorPoint = await page.evaluate(() => {
+    const { engine, player, room } = (window.__ms as unknown as DoorTestApi).game;
+    const { door } = room;
+    player.place(door.x - 3.5, door.z);
+    return engine.toScreen(player.position.clone().set(door.x + 0.35, 1.25, door.z));
+  });
+  if (!doorPoint) throw new Error("The store door is outside the camera view");
+  const bubble = page.locator("[data-test=door-exit]");
+  expect(await distanceFromDoor(page)).toBeGreaterThan(1.6);
+  await page.mouse.move(doorPoint.x, doorPoint.y);
+  await expect(page.locator(".scene-canvas")).toHaveCSS("cursor", "pointer");
+  await page.mouse.click(doorPoint.x, doorPoint.y);
+  await expect(bubble).toBeHidden();
+  await expect(bubble).toBeVisible();
+  expect(await distanceFromDoor(page)).toBeLessThan(0.2);
+  await bubble.getByRole("button", { name: "Yes" }).click();
+  await expect.poll(() => page.evaluate(() => (window.__ms as unknown as DoorTestApi).state().area)).toBe("town");
 });
