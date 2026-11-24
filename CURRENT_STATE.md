@@ -5,13 +5,11 @@ Built directly by Claude at the user's request (no router; the user has chosen "
 stage). Plan reviews and specs: `SPEC.md` §1 (Level 1), §6 (Level 2), §7 (Level 3), §8 (Level 4), §9 (Level 5);
 decisions with reasons in `DESIGN_DECISIONS.md` (latest: 2026-11-24 Level 5, the Gym). All five places are built.
 
-**Live (pushed, `main` ab0fcf4):** core systems, Level 1 (Stationery Store), Level 2 (Classroom), town hub.
+**Live (pushed and deployed 2026-11-24, `main` after 756cca5):** core systems, all five levels (Store, Classroom,
+Zoo, Supermarket, Gym), town hub. https://nolancasama.github.io/magic-stationery/
 Public repo nolancasama/magic-stationery, GitHub Pages (Actions workflow: unit tests + build, then deploy).
+Pushed on the user's go-ahead before the e2e re-run, so Levels 4 and 5 are live but have not been played or e2e-tested.
 
-**Committed locally, NOT pushed (2026-11-24):** e187064 — the fix pass (user plan "Bug Fixes, Movement
-Improvements, Speech Recognition, and Unfinished Work"), Level 3 (the Zoo) and the verification fixes below;
-6b7a829 Level 4 (the Supermarket); then Level 5 (the Gym). The user asked to push to live when finished; the
-push waits for the re-run in Next Steps 1 (or the user's go-ahead).
 
 The user (2026-11-24): "no tests for this session just make levels" — so Levels 4 and 5 have never been run;
 only tsc/build, content checks of their hint drawings, and screenshots of their rooms.
@@ -79,6 +77,5 @@ only tsc/build, content checks of their hint drawings, and screenshots of their 
    rackets/bats, the festival); rebuild and run gaze + `store.spec.ts` + `school.spec.ts`, then the whole
    suite; `node scripts/pass-shots.mjs http://127.0.0.1:4181/ .tmp/shots/pass` with
    `npm run preview -- --port 4181` running, and judge the shots.
-2. Push to live (the user asked for it when finished, after the re-run or on their go-ahead); confirm the
-   Pages deploy.
+2. (Done 2026-11-24: pushed to live, Pages deploy succeeded.)
 3. Measure draw calls in the restored supermarket and gym (Chromebook budget ~100-140).
