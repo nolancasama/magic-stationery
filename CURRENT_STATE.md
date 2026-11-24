@@ -5,10 +5,8 @@ Levels 1-5 built directly by Claude; the 2026-11-24 fix pass went through the wo
 Claude reviewed and did acceptance). Plan reviews and specs: `SPEC.md` §1 (Level 1), §6 (Level 2), §7 (Level 3),
 §8 (Level 4), §9 (Level 5); decisions in `DESIGN_DECISIONS.md` (latest: 2026-11-24 fix pass). All five places built.
 
-**Live (`main` 3a84c9d):** https://nolancasama.github.io/magic-stationery/ — public repo, GitHub Pages via Actions.
-**Uncommitted in the working tree (clone at ~/Projects/magic-stationery):** the whole 2026-11-24 fix pass — basket
-counting phases, grocer staging, town signs, speech latency/status states, arm clamp, NPC separation, door exits,
-Taro/npcEnter fix, soccer cart, market + gym e2e specs. Not committed or pushed (awaiting the user).
+**Live (`main` 941bf4f, deployed 2026-11-24):** https://nolancasama.github.io/magic-stationery/ — includes the
+whole fix pass. Public repo, GitHub Pages via Actions. Working clone: ~/Projects/magic-stationery.
 
 **Models:**
 - Sketch model (`public/models/sketch-model.bin`, 138 Quick, Draw! classes): int8 top-1 79.9%, top-3 93.2%.
@@ -44,7 +42,7 @@ Taro/npcEnter fix, soccer cart, market + gym e2e specs. Not committed or pushed 
 - Tests: 155 unit (16 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
   `school.spec.ts`, `zoo.spec.ts`, `market.spec.ts`, `gym.spec.ts` (visits the market first: Taro regression).
 
-## Verification (exact — 2026-11-24, fix pass, uncommitted tree)
+## Verification (exact — 2026-11-24, fix pass, commit 941bf4f)
 - tsc clean; 155 unit tests pass; build OK.
 - e2e, all passing on the final tree: fixes.spec (14 incl. door exits) + market.spec (twice more, stable);
   store (speaking + tap mode), school, zoo; gym.spec (1).
@@ -68,7 +66,7 @@ Taro/npcEnter fix, soccer cart, market + gym e2e specs. Not committed or pushed 
 - Deferred: Level 2 timetable; zoo giraffes/fish/ducks.
 
 ## Next Steps
-1. User decision: commit and push the fix pass (`.ai/` holds delegation scratch — do not commit it).
+1. (Done 2026-11-24: fix pass committed 941bf4f and deployed. `.ai/` is local delegation scratch — never commit.)
 2. On a real Chromebook: speak the short phrases ("Here you are.", "Do you have a pencil?", "Eight thirty.",
    "I like apples.") fluently and slowly; judge latency and the status line; turn mic off and finish a level.
 3. Counting camera / basket pose (Known Issues 1); objective pill overflow.
