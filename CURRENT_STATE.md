@@ -8,6 +8,9 @@ Claude reviewed and did acceptance). Plan reviews and specs: `SPEC.md` §1 (Leve
 **Live (`main` 941bf4f, deployed 2026-11-24):** https://nolancasama.github.io/magic-stationery/ — includes the
 whole fix pass. Public repo, GitHub Pages via Actions. Working clone: ~/Projects/magic-stationery.
 
+**Uncommitted (2026-11-28): the zoo rebuilt as a 24 x 18 m park** (DESIGN_DECISIONS 2026-11-28). Accepted by
+Claude (screenshots, motion sampling, full e2e); not committed or deployed: waiting for the user.
+
 **Models:**
 - Sketch model (`public/models/sketch-model.bin`, 138 Quick, Draw! classes): int8 top-1 79.9%, top-3 93.2%.
 - Glyph model (`public/models/glyph-model.bin`, 0-9 / a-z / A-Z / scribble): top-1 80.9%, top-3 96.4% on
@@ -39,8 +42,26 @@ whole fix pass. Public repo, GitHub Pages via Actions. Working clone: ~/Projects
   `countView` in `levels/market.ts`, `game/doorExit.ts` (door bubble hysteresis), `doorInsideX` in `room.ts`,
   arm clamp + people separation in `characters.ts`, speech timings/status in `ui/ask.ts`, `isSpeechPrefix` in
   `speech/match.ts`. Debug: `MS_SHOTS=<dir>` makes market.spec / the door test in fixes.spec save screenshots.
-- Tests: 155 unit (16 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
+- Zoo rebuild (2026-11-28): `world/areas/zooLayout.ts` is the single source of every zoo position, camera,
+  anchor, climbing node/edge, rope (`ropePoint`), pool and POI (+ `zooLayout.test.ts`); `areas/zoo.ts` builds
+  the scene from it; `levels/zooLife.ts` (+ pure `zooLifePlans.ts`) owns all animal motion and the script's
+  beats (`zooIntro`, `feedMonkeys`, `feedPandas`, `startZooLife`, also started by `?scene=zoo&fill=1`);
+  `RoomArea.follow` + follow camera in `game.ts`; `expandSlotSave` in `save.ts` (old zoo saves fill the new
+  anchors with the child's own art); `NavMap` ovals + heap A*. Anchors: 2 elephants, 4 monkeys, 4 bananas,
+  2 pandas, 6 bamboo, 5 penguins.
+- Tests: 192 unit (21 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
   `school.spec.ts`, `zoo.spec.ts`, `market.spec.ts`, `gym.spec.ts` (visits the market first: Taro regression).
+
+## Verification (exact — 2026-11-28, zoo rebuild, uncommitted tree)
+- tsc clean; 192 unit tests pass; build OK; full e2e 20/20 pass (12.9 min) on the final build.
+- Screenshots judged (`?scene=zoo`, erased and `fill=1`): overview, gate, plaza, each habitat, follow camera.
+- Motion sampled 40 s at speed 2: elephants never closer than 2.25 m, never in water/obstacles/outside roam,
+  up to 15 m walked; penguins never below the surface outside the pool; pandas no collisions; monkeys
+  99.6% of samples on the climbing structures (the rest are jump arcs). Penguin crowding on land after the
+  rest-reservation fix: 15/392 sampled frames with a pair < 0.3 m (walk-pasts), was 141/395.
+- Old-format completed zoo save (3 monkeys/bananas/bamboo/penguins): every anchor filled with the saved art,
+  no ghosts, steps kept, stored save untouched.
+- Draw calls (`fill=1`): zoo overview 118 (erased 74), exhibit views 42-72.
 
 ## Verification (exact — 2026-11-24, fix pass, commit 941bf4f)
 - tsc clean; 155 unit tests pass; build OK.
@@ -62,10 +83,17 @@ whole fix pass. Public repo, GitHub Pages via Actions. Working clone: ~/Projects
 - The pen's speech bubble covers the canvas's top-left corner.
 - Thin lines read small from the overview camera; drawn desks look spindly.
 - Real Chromebook touchpad, microphone and Chrome recognition untested (fake recogniser only).
-- Zoo: debug `?scene=zoo&fill=1` shows animals static (life loops start only in the level script).
-- Deferred: Level 2 timetable; zoo giraffes/fish/ducks.
+- Zoo: penguins can briefly overlap while walking past each other (resting places are reserved).
+- Zoo: performance on a real Chromebook unmeasured (SwiftShader only); the scene is ~118 draw calls.
+- Deferred: Level 2 timetable; zoo giraffes/fish/ducks; a pool viewing window; birds.
+
+## Codex / Delegated Work
+- Zoo rebuild 2026-11-28: world slice (Codex, SUCCESS) and life slice (Codex; its run stalled when Codex usage
+  ran out, output was complete and passing) both reviewed and accepted by Claude; Claude added the penguin
+  rest reservation, panda-garden planting and the plaza camera. Nothing in flight.
 
 ## Next Steps
+0. The user decides whether to commit and deploy the zoo rebuild (uncommitted on `main`).
 1. (Done 2026-11-24: fix pass committed 941bf4f and deployed. `.ai/` is local delegation scratch — never commit.)
 2. On a real Chromebook: speak the short phrases ("Here you are.", "Do you have a pencil?", "Eight thirty.",
    "I like apples.") fluently and slowly; judge latency and the status line; turn mic off and finish a level.

@@ -55,6 +55,20 @@ export interface SlotSave {
   src?: number[];
 }
 
+/** Fill new anchors on load without changing any of the original saved art or placements. */
+export function expandSlotSave(saved: SlotSave, anchorCount: number, copyTints: readonly (string | null)[] = []): SlotSave {
+  const count = saved.tints.length;
+  if (count >= anchorCount) return saved;
+  const tints = saved.tints.slice();
+  const src = saved.src?.slice() ?? saved.tints.map(() => 0);
+  for (let index = count; index < anchorCount; index++) {
+    const copy = index - count;
+    tints.push(copyTints[copy % (copyTints.length || 1)] ?? null);
+    src[index] = copy % (saved.arts?.length || 1);
+  }
+  return { ...saved, tints, src };
+}
+
 export interface Settings {
   /** Teacher setting: microphone allowed. Off = the whole game by tapping. */
   mic: boolean;

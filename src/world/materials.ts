@@ -69,6 +69,41 @@ export function worldBasicMaterial(opts: THREE.MeshBasicMaterialParameters = {},
   return m;
 }
 
+export function worldFoliageMaterial(strength: { value: number }): THREE.MeshLambertMaterial {
+  const material = worldMaterial();
+  const restore = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    restore(shader, renderer);
+    shader.uniforms.uTime = timeUniform;
+    shader.uniforms.uSway = strength;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uSway;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+        float breeze = uTime * 1.5 + position.x * 0.7 + position.z * 0.5;
+        transformed.xz += vec2(sin(breeze), cos(breeze * 0.8)) * uSway * smoothstep(0.12, 2.4, position.y);`);
+  };
+  material.customProgramCacheKey = () => "ms-restore-foliage";
+  return material;
+}
+
+export function worldWaterMaterial(strength: { value: number }): THREE.MeshBasicMaterial {
+  const material = worldBasicMaterial({ vertexColors: true });
+  const restore = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    restore(shader, renderer);
+    shader.uniforms.uTime = timeUniform;
+    shader.uniforms.uShimmer = strength;
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uShimmer;")
+      .replace("#include <dithering_fragment>", `#include <dithering_fragment>
+        float ripple = sin(vMsWorld.x * 8.0 + vMsWorld.z * 4.0 - uTime * 1.4)
+          * sin(vMsWorld.z * 7.0 - vMsWorld.x * 2.0 + uTime * 1.8);
+        gl_FragColor.rgb *= 1.0 + uShimmer * (ripple + 0.5 * sin(uTime * 1.3));`);
+  };
+  material.customProgramCacheKey = () => "ms-restore-water";
+  return material;
+}
+
 /** Default world material (vertex colours, restore patch). */
 export const worldMat = worldMaterial();
 /** Glowing world parts (lamps) — emissive driven by the area script. */

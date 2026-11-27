@@ -7,6 +7,7 @@ import { audio } from "./audio/audio.ts";
 import { music } from "./audio/music.ts";
 import { Game } from "./game/game.ts";
 import { LEVELS } from "./game/levels/index.ts";
+import { startZooLife } from "./game/levels/zooLife.ts";
 import { defaults, placeProgress } from "./game/save.ts";
 import { exampleFor } from "./recognition/examples.ts";
 import { glyphExample } from "./recognition/glyphs.ts";
@@ -64,6 +65,7 @@ async function boot() {
     game.enterRoom(scene);
     game.hud.setVisible(true);
     if (params.has("fill")) await game.debugFill();
+    if (scene === "zoo") startZooLife(game);
     const view = params.get("view");
     if (view) game.focus(game.room.views[view] ?? game.room.views.overview, true);
     return;

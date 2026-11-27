@@ -59,6 +59,7 @@ import {
   zooUnits,
   STORE_STEPS,
   SLOT_KEYS,
+  expandSlotSave,
   load,
   placeProgress,
   schoolUnits,
@@ -127,12 +128,12 @@ const DISPLAY: Record<WordId, { fit: Fit; upright?: boolean; hinge?: boolean; en
   notebook: { fit: { w: 0.34, h: 0.38 }, entrance: "flutter", tilt: -(Math.PI / 2 - 0.95) },
   schoolbag: { fit: { w: 0.5, h: 0.55 }, entrance: "hop", tilt: 0 },
   desk: { fit: { w: 0.85, h: 0.68 }, entrance: "bounce", tilt: 0 },
-  elephant: { fit: { w: 1.1, h: 0.9 }, entrance: "hop", tilt: 0 },
+  elephant: { fit: { w: 1.9, h: 1.5 }, entrance: "hop", tilt: 0 },
   monkey: { fit: { w: 0.6, h: 0.66 }, entrance: "hop", tilt: 0 },
-  panda: { fit: { w: 0.7, h: 0.7 }, entrance: "hop", tilt: 0 },
-  penguin: { fit: { w: 0.4, h: 0.55 }, entrance: "hop", tilt: 0 },
+  panda: { fit: { w: 0.85, h: 0.85 }, entrance: "hop", tilt: 0 },
+  penguin: { fit: { w: 0.42, h: 0.58 }, entrance: "hop", tilt: 0 },
   banana: { fit: { w: 0.26, h: 0.22 }, entrance: "drop", tilt: 0 },
-  bamboo: { fit: { w: 0.3, h: 1.2 }, upright: true, entrance: "spin", tilt: 0 },
+  bamboo: { fit: { w: 0.34, h: 1.5 }, upright: true, entrance: "spin", tilt: 0 },
   chair: { fit: { w: 0.5, h: 0.78 }, entrance: "hop", tilt: 0 },
   // The supermarket's food: a little bigger than life so it reads from the overview camera.
   apple: { fit: { w: 0.26, h: 0.26 }, entrance: "bounce", tilt: 0 },
@@ -406,6 +407,7 @@ export class Game {
     if (this.inLevelRoom) {
       this.room.update(t);
       for (const c of [this.player, ...Object.values(this.cast)]) if (c.root.parent === this.room.scene) c.update(dt);
+      if (this.followingRoom === this.room) this.updateFollow(this.room);
       this.updateDoorBubble();
     } else if (this.area === "town") {
       this.town.update(t);
@@ -495,6 +497,7 @@ export class Game {
     if (this.keys.has("r")) (x += r.x), (z += r.z);
     if (this.keys.has("l")) (x -= r.x), (z -= r.z);
     const len = Math.hypot(x, z);
+    if (len && d.lengthSq() === 0) this.startFollow();
     d.set(len ? x / len : 0, len ? z / len : 0);
   }
 
@@ -600,12 +603,27 @@ export class Game {
     if (id && this.slotWait?.ids.includes(id)) {
       const w = this.slotWait;
       this.slotWait = null;
+      this.followingRoom = null;
       audio.click();
       w.resolve(id);
       return;
     }
     const slot = id ? this.room.slots[id] : undefined;
     if (slot && id) {
+      if (this.room.follow && this.canWalk) {
+        const floor = this.engine.pick(x, y, [this.room.floor]);
+        if (floor) {
+          const point = floor.point;
+          const local = slot.hotspot.worldToLocal(point.clone());
+          const box = slot.hotspot.geometry.boundingBox;
+          if (box && (local.x < box.min.x || local.x > box.max.x || local.z < box.min.z || local.z > box.max.z)
+            && !this.room.nav.collides(point.x, point.z, 0.05)) {
+            this.startFollow();
+            void this.player.go(point.x, point.z);
+            return;
+          }
+        }
+      }
       const w = WORDS[slot.word];
       this.hud.say(this.slotDone(id) ? `${capital(w.plural)}!` : `${capital(w.plural)}… not now.`, this.slotDone(id) ? w.ja : `${w.ja}… あとでね`, 1600);
       return;
@@ -613,7 +631,10 @@ export class Game {
     if (id) return;
     if (this.scripting && !this.slotWait) return;
     const floor = this.engine.pick(x, y, [this.room.floor]);
-    if (floor) void this.player.go(floor.point.x, floor.point.z);
+    if (floor && (!this.room.follow || this.canWalk)) {
+      this.startFollow();
+      void this.player.go(floor.point.x, floor.point.z);
+    }
   }
 
   private clickTown(x: number, y: number) {
@@ -824,8 +845,9 @@ export class Game {
       for (const m of slot.items) this.room.scene.remove(m.root);
       slot.items = [];
       slot.ghosts.forEach((g) => (g.visible = true));
-      const saved = saves[id];
-      if (!saved) continue;
+      const entry = saves[id];
+      if (!entry) continue;
+      const saved = this.place === "zoo" ? expandSlotSave(entry, slot.anchors.length, COPY_TINTS[slot.word]) : entry;
       const arts = saved.arts?.length ? saved.arts : [this.legacyArt(slot.word, saved.drawing)];
       const src = saved.src ?? saved.tints.map(() => 0);
       this.slotArt[id] = { arts, src: src.slice() };
@@ -880,7 +902,26 @@ export class Game {
   }
 
   // ------------------------------------------------------------ camera
+  private followingRoom: RoomArea | null = null;
+
+  private startFollow() {
+    if (this.inLevelRoom && this.room.follow) this.followingRoom = this.room;
+  }
+
+  private updateFollow(room: RoomArea) {
+    const follow = room.follow;
+    if (!follow) return;
+    const { x, y, z } = this.player.position;
+    const lookX = THREE.MathUtils.clamp(x, follow.look.minX, follow.look.maxX);
+    const lookZ = THREE.MathUtils.clamp(z - follow.lookAhead, follow.look.minZ, follow.look.maxZ);
+    this.engine.focus(
+      { x: lookX, y: y + follow.up, z: lookZ + follow.lookAhead + follow.back },
+      { x: lookX, y: y + follow.lookUp, z: lookZ }
+    );
+  }
+
   focus(view: View, snap = false) {
+    this.followingRoom = null;
     this.engine.focus(view.pos, view.look, snap);
   }
 
@@ -1365,7 +1406,9 @@ export class Game {
     u.uRestore.value = level0;
     u.uWave.value.set(from.x, from.y, from.z, 0.01);
     u.uWaveBoost.value = level1 - level0;
-    await animate(1.8, (k) => (u.uWave.value.w = 0.01 + ease.out(k) * 14));
+    const { minX, maxX, minZ, maxZ } = this.room.bounds;
+    const radius = 1 + Math.hypot(Math.max(Math.abs(from.x - minX), Math.abs(from.x - maxX)), Math.max(Math.abs(from.z - minZ), Math.abs(from.z - maxZ)), from.y);
+    await animate(1.8, (k) => (u.uWave.value.w = THREE.MathUtils.lerp(0.01, radius, ease.out(k))));
     u.uRestore.value = level1;
     u.uWaveBoost.value = 0;
     u.uWave.value.w = -1;
@@ -1531,7 +1574,7 @@ export class Game {
         c.faceTo(room.hostSpot.x, room.hostSpot.z);
         c.emote(Math.random() < 0.5 ? "wave" : "laugh", 1.0);
       }
-      await wait(1.6 + Math.random() * 2.2);
+      await wait(room.follow && slot ? 4 + Math.random() * 4 : 1.6 + Math.random() * 2.2);
     }
   }
 

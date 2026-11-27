@@ -383,3 +383,50 @@ user's "Claude directly" work).
   everyone who moves between rooms); the camera frames the visitor before dialogue.
 - **Town signs** derive position from their facade; supermarket facade raised and gym fascia deepened to fit.
 - **Soccer cart:** internal dividers removed; wire bars on the long walls only; ball anchors refitted inside.
+
+## 2026-11-28 — The zoo rebuilt as a 24 x 18 m park (plan reviewed by Claude; layout by Claude; scene and animals routed to Codex)
+
+The user's plan: the zoo (9.4 x 6.4 m, four 2.2 m pens in a row, elephants in 2.15 x 2.45 m) felt like display
+pens. Accepted with these changes and additions:
+
+- **One layout file is the contract.** `src/world/areas/zooLayout.ts` holds every position, size, camera,
+  anchor, climbing node, rope and pool as plain data; the scene (`areas/zoo.ts`) builds exactly those
+  structures and the animals (`levels/zooLife.ts`) move on exactly those numbers, so climbing and swimming
+  line up by construction. `zooLayout.test.ts` checks reachability, clearances and spacing (it caught a
+  watering hole that walled off the back of the elephant habitat; the pond now lies against the west fence
+  with a 1.5 m way past it). *Rejected:* scaling the old coordinates; positions spread over three files.
+- **Layout:** elephants on the whole west side (7.15 x 12.65 m, about twice any other habitat), a monkey
+  island in a moat at the back centre, the panda garden back right, the penguin pool east beside the gate;
+  a promenade along the front, a loop of paths round a central garden (four beds, a fountain), a back path
+  and a side overlook. Paths are the corridors between habitats and raised beds, so routes follow them
+  without a path-cost map; collision stays rectangles plus ovals.
+- **The gate stays in the east fence** (near the front), like every room's door. *Rejected:* a front-centre
+  entrance (a second door orientation through the shared door/NPC/exit code of every room, and an arch
+  between the diorama camera and the zoo).
+- **Saves:** saves keep drawings and per-anchor tints, never positions, so saved animals appear in the new
+  habitats by themselves. The habitats hold more animals (4 monkeys, 4 bananas, 6 bamboo, 5 penguins); an
+  older save is expanded on load (`expandSlotSave`, zoo only) with copies of the child's own drawings. The
+  stored save is not rewritten; format and key unchanged.
+- **Bigger drawn animals:** elephant drawings 1.9 x 1.5 m (were 1.1 x 0.9), pandas 0.85 m, bamboo 1.5 m; a
+  toy-sized elephant in a big habitat looked lost. The drawing itself is never replaced or restyled.
+- **No bamboo decor in the panda garden:** the level asks the child to draw bamboo, so their bamboo is the
+  grove (six stalks in three clumps). The garden gets low walk-through planting instead.
+- **Behaviour:** elephants follow a weighted activity loop on their own nav map (drink and spray at shores,
+  mud bath, hay rack, shade, come to the visitors, greet each other) and keep >= 2.1 m apart by reserving
+  destinations; monkeys move only along a climbing graph (walk, climb, branch, swing on ropes, hang-walk the
+  rope bridge, jump), one per node; pandas wander slowly, rest long, munch at the clumps; penguins waddle,
+  use ramps or the dive rock, swim at the surface inside the convex pool (the opaque water hides the rest)
+  and reserve resting places so they do not stand on each other. Animals billboard to the camera every
+  frame (flat drawings, moving cameras). The script awaits capped "beats" so each line matches what is seen
+  ("they're spraying water", "they can swim", feeding, munching).
+- **Follow camera only in big rooms:** `RoomArea.follow` (the zoo) makes the camera follow the player while
+  they walk freely; any scripted focus takes over. A click that passes through a habitat's click box onto a
+  path walks there (big rooms only). Small rooms are unchanged.
+- **People:** Mr. Oka walks to each exhibit when the child clicks it and faces the player when he speaks;
+  Yui appears on the path beside the elephants instead of walking 20 m from the gate; Ken and Taro come in by
+  the gate (it is next to the penguins and the plaza). After the zoo is restored Mr. Oka does keeper rounds;
+  visitors linger 4-8 s at exhibits. *Rejected:* a new zookeeper character (a new cast model for little gain).
+- **Engine:** nav ovals; A* on a binary heap with a gallop string-pull (gate to far corner well under 5 ms);
+  shortcuts keep the full clearance radius. The colour wave reaches the far corners of big rooms. One
+  foliage material sways, water shimmers in the shader; no new lights or shadows.
+- **Not done:** a viewing window into the pool, birds, a path-cost map, giraffes/fish/ducks (still deferred).

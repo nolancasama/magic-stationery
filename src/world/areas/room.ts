@@ -83,6 +83,7 @@ export interface RoomArea {
   readonly bounds: Rect;
   readonly door: Door;
   readonly views: { overview: View; door: View } & Record<string, View>;
+  readonly follow?: { up: number; back: number; lookUp: number; lookAhead: number; look: Rect };
   /** Where the room's host (Ms. Penny, Ms. Mori) stands. */
   readonly hostSpot: { x: number; z: number; facing: number };
   /** Places people wander to when the room is alive: x, z, slot they look at. */
