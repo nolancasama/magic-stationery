@@ -5,11 +5,10 @@ Levels 1-5 built directly by Claude; the 2026-11-24 fix pass went through the wo
 Claude reviewed and did acceptance). Plan reviews and specs: `SPEC.md` §1 (Level 1), §6 (Level 2), §7 (Level 3),
 §8 (Level 4), §9 (Level 5); decisions in `DESIGN_DECISIONS.md` (latest: 2026-11-24 fix pass). All five places built.
 
-**Live (`main` 941bf4f, deployed 2026-11-24):** https://nolancasama.github.io/magic-stationery/ — includes the
-whole fix pass. Public repo, GitHub Pages via Actions. Working clone: ~/Projects/magic-stationery.
-
-**Uncommitted (2026-11-28): the zoo rebuilt as a 24 x 18 m park** (DESIGN_DECISIONS 2026-11-28). Accepted by
-Claude (screenshots, motion sampling, full e2e); not committed or deployed: waiting for the user.
+**Live (`main` 3756b6b, deployed 2026-11-28):** https://nolancasama.github.io/magic-stationery/ — includes the
+fix pass and the zoo rebuilt as a 24 x 18 m park (DESIGN_DECISIONS 2026-11-28); live site checked in a browser
+(new zoo bounds, all anchors filled, follow camera, no page errors). Public repo, GitHub Pages via Actions.
+Working clone: ~/Projects/magic-stationery.
 
 **Models:**
 - Sketch model (`public/models/sketch-model.bin`, 138 Quick, Draw! classes): int8 top-1 79.9%, top-3 93.2%.
@@ -52,7 +51,7 @@ Claude (screenshots, motion sampling, full e2e); not committed or deployed: wait
 - Tests: 192 unit (21 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
   `school.spec.ts`, `zoo.spec.ts`, `market.spec.ts`, `gym.spec.ts` (visits the market first: Taro regression).
 
-## Verification (exact — 2026-11-28, zoo rebuild, uncommitted tree)
+## Verification (exact — 2026-11-28, zoo rebuild, commit 3756b6b)
 - tsc clean; 192 unit tests pass; build OK; full e2e 20/20 pass (12.9 min) on the final build.
 - Screenshots judged (`?scene=zoo`, erased and `fill=1`): overview, gate, plaza, each habitat, follow camera.
 - Motion sampled 40 s at speed 2: elephants never closer than 2.25 m, never in water/obstacles/outside roam,
@@ -93,8 +92,7 @@ Claude (screenshots, motion sampling, full e2e); not committed or deployed: wait
   rest reservation, panda-garden planting and the plaza camera. Nothing in flight.
 
 ## Next Steps
-0. The user decides whether to commit and deploy the zoo rebuild (uncommitted on `main`).
-1. (Done 2026-11-24: fix pass committed 941bf4f and deployed. `.ai/` is local delegation scratch — never commit.)
+1. (Done 2026-11-28: zoo rebuild committed 3756b6b and deployed. `.ai/` is local delegation scratch — never commit.)
 2. On a real Chromebook: speak the short phrases ("Here you are.", "Do you have a pencil?", "Eight thirty.",
    "I like apples.") fluently and slowly; judge latency and the status line; turn mic off and finish a level.
 3. Counting camera / basket pose (Known Issues 1); objective pill overflow.
