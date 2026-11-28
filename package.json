@@ -10,7 +10,12 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "e2e": "npm run build && playwright test"
+    "e2e": "node tests/support/test-lock.mjs -- \"npm run build && playwright test --project=functional\"",
+    "e2e:visual": "node tests/support/test-lock.mjs -- \"npm run build && playwright test --project=visual --pass-with-no-tests\"",
+    "e2e:perf": "node tests/support/test-lock.mjs -- \"npm run build && playwright test --project=perf --pass-with-no-tests\"",
+    "e2e:full": "node tests/support/test-lock.mjs -- \"npm run build && playwright test --pass-with-no-tests\"",
+    "e2e:compat": "node tests/support/test-lock.mjs --swiftshader -- \"npm run build && playwright test --project=functional\"",
+    "test:kit": "node --test tests/support/kit.selftest.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

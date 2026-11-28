@@ -1,31 +1,41 @@
+import { existsSync, statSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
 
+const worktree = existsSync(".git") && statSync(".git").isFile();
+const port = Number(process.env.PREVIEW_PORT ?? (worktree ? 4281 : 4181));
+const baseURL = process.env.BASE_URL || `http://127.0.0.1:${port}`;
+
 export default defineConfig({
-  testDir: "./tests/e2e",
   testMatch: "**/*.spec.ts",
   fullyParallel: false,
-  workers: 1,
+  workers: Number(process.env.PW_WORKERS ?? 1),
   retries: 0,
   timeout: Number(process.env.MS_TIMEOUT ?? 240_000),
   reporter: "line",
+  globalSetup: "./tests/support/global-setup.ts",
   use: {
-    baseURL: "http://127.0.0.1:4181",
+    ...devices["Desktop Chrome"],
+    channel: "chromium",
+    viewport: { width: 1366, height: 768 },
+    deviceScaleFactor: 1,
+    baseURL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     launchOptions: {
-      args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
+      args: process.env.CB_SWIFTSHADER === "1"
+        ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] : []
     }
   },
-  webServer: {
-    command: "npm run preview -- --host 127.0.0.1 --port 4181 --strictPort",
-    url: "http://127.0.0.1:4181",
+  webServer: process.env.BASE_URL ? undefined : {
+    command: `npm run preview -- --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: true,
     timeout: 60_000
   },
   projects: [
-    {
-      name: "chromebook",
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 }
-    }
+    { name: "functional", testDir: "./tests/e2e" },
+    { name: "visual", testDir: "./tests/visual" },
+    { name: "perf", testDir: "./tests/perf" },
+    { name: "soak", testDir: "./tests/soak" }
   ]
 });

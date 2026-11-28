@@ -466,3 +466,31 @@ pens. Accepted with these changes and additions:
   stage, finishes/resets a place, quick-travels, sets speed, shows live stats. Stage changes write the normal
   save and reload with `&go=1` (title skipped). *Rejected:* a separate debug build (one URL flag works on the
   deployed site too); editing state live without reload (every room rebuilds from the save on entry anyway).
+## 2026-11-28 — Machine-wide testing workflow pilot
+
+- **What:** browser tests now default to hardware-accelerated Chromium (new headless), with SwiftShader
+  reserved for explicit compatibility runs or machines without a usable GPU. The renderer is probed and
+  logged on every browser run; the Chromebook-size viewport remains 1366 x 768 at device scale factor 1.
+- **Tiers:** functional tests live in `tests/e2e/`, visual evidence in `tests/visual/`, performance tests in
+  `tests/perf/`, and long-running checks in `tests/soak/`. The full-regression script runs all tiers.
+  Triangle/draw-call budgets stay functional. The pen-width test also stays functional: its screenshot
+  accompanies assertions for width selection, stored stroke widths and undo.
+- **Isolation:** every browser script acquires a machine-wide FIFO lock before building. The reusable
+  Node-built-in-only kit records a holder heartbeat, recovers stale holders/tickets, bounds only a waiter's
+  waiting time, and records run duration, machine CPU, worker count, exit code and renderer in
+  `.tmp/test-runs.jsonl`. Nested invocations share the held lock. A waiter never terminates another run.
+- **Server identity:** port 4181 (4281 in a git worktree; `PREVIEW_PORT` overrides) is checked against the
+  current local `dist/index.html` before browser setup. This guards `reuseExistingServer: true` against
+  another checkout or an old build. An explicit external `BASE_URL` skips that local identity check.
+- **Established desktop benchmark, not rerun for this migration:** Tier 1 passed 13/13 on SwiftShader
+  (509 s) and the NVIDIA GTX 1080 (361 s, one worker). GPU two-worker execution took 201 s (-44% wall
+  time) with +37% CPU work and identical results, meeting the machine-wide eligibility thresholds.
+  One worker remains the default; two are allowed only when the wrapper's machine CPU sample is at
+  most 30%, and the worker count is capped at two.
+- **Rejected:** retaining SwiftShader as a Chromebook proxy. The same Monster Island start-area scene
+  runs at 6.9 FPS on SwiftShader versus 101 FPS on the GTX 1080; a Chromebook iGPU is far faster than
+  SwiftShader. Desktop GPU figures still do not establish Chromebook performance. Draw-call and
+  triangle budgets remain the renderer-independent guard until the real device is measured.
+- **Why:** serialize heavy work across agents, fail quickly on the wrong preview server, and run only
+  the tier a change needs. The self-contained `tests/support/` kit is intended to be copied unchanged to
+  sibling games; machine-wide policy remains `C:/Users/nolan/.claude/testing/TESTING_WORKFLOW.md`.

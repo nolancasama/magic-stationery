@@ -3,7 +3,7 @@
 ## Status
 Levels 1-5 built directly by Claude; the 2026-11-24 fix pass went through the worker router (Codex implemented,
 Claude reviewed and did acceptance). Plan reviews and specs: `SPEC.md` §1 (Level 1), §6 (Level 2), §7 (Level 3),
-§8 (Level 4), §9 (Level 5); decisions in `DESIGN_DECISIONS.md` (latest: 2026-11-24 fix pass). All five places built.
+§8 (Level 4), §9 (Level 5); decisions in `DESIGN_DECISIONS.md` (latest: 2026-11-28 testing workflow pilot). All five places built.
 
 **Live (`main` 3756b6b, deployed 2026-11-28):** https://nolancasama.github.io/magic-stationery/ — includes the
 fix pass and the zoo rebuilt as a 24 x 18 m park (DESIGN_DECISIONS 2026-11-28); live site checked in a browser
@@ -58,6 +58,38 @@ Working clone: ~/Projects/magic-stationery.
   everything, stage presets, finish/reset/go per place, speed, live stats. Checked in a browser.
 - Tests: 207 unit (24 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
   `school.spec.ts`, `zoo.spec.ts`, `market.spec.ts`, `gym.spec.ts` (visits the market first: Taro regression).
+- Testing infrastructure: `tests/support/` contains the reusable machine-wide lock, server identity check,
+  renderer probe and kit self-tests. Browser scripts build inside the lock and default to hardware
+  Chromium, one worker, port 4181 (worktrees 4281). Tier scripts and the test map are in `AGENTS.md`.
+
+## Testing workflow (2026-11-28)
+- Established Tier 1 baseline: 13/13 pass on SwiftShader (509 s) and GPU (361 s, one worker); GPU two
+  workers took 201 s with +37% CPU work. These are prior desktop benchmarks, not measurements from
+  the infrastructure migration. Two workers qualify when the machine is idle; one remains the default.
+- Use `npm run e2e` for functional tests, `e2e:visual` for visual evidence, `e2e:perf` for performance,
+  `e2e:full` for all tiers including soak, and `e2e:compat` for explicit SwiftShader compatibility.
+  `npm run test:kit` checks the reusable kit without a browser. Run types with `npm run typecheck` and
+  unit tests with `npm test`. Every browser run logs the renderer and records `.tmp/test-runs.jsonl`.
+- The pen-width screenshot stays in the functional spec because it also checks controls, stored widths
+  and undo. No dedicated visual, perf or soak specs currently exist. Draw-call budgets stay functional.
+- Pilot checks: `npm run test:kit` passed 7/7 after correcting a harness teardown-order issue;
+  `npm run typecheck` passed; `npm test` passed 112/112. Build passed inside both browser commands.
+- Wrong-server demonstration: a deliberately different node:http server on 4181 was confirmed before
+  `npm run e2e -- --grep="pen widths"`; setup failed immediately with `WRONG_SERVER` (exit 1,
+  2.65 s, one worker). That server was stopped. Its run record is in `.tmp/test-runs.jsonl`.
+- **Accepted:** `npm run e2e` run outside the worker sandbox, through the lock: 13/13 passed in
+  366.8 s, one worker, avg machine CPU 45.2%, renderer
+  `ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 (0x00001B80) Direct3D11 vs_5_0 ps_5_0, D3D11)`
+  (record in `.tmp/test-runs.jsonl`). Same 13/13 as the SwiftShader baseline. That run predates the
+  zoo rebuild, town redesign, market.spec and gym.spec (merged afterwards); those run under the new
+  setup on their next routine run.
+- Watch item: an earlier run inside a worker sandbox stalled on the final Zoo test and was
+  interrupted. It did not recur in the accepted run. If the Zoo test hangs again, rerun only
+  `tests/e2e/zoo.spec.ts` before suspecting the migration.
+- Codex's sandbox may write the lock folder (`writable_roots` in `~/.codex/config.toml`), so Codex
+  runs queue like everyone else.
+- Review fix: an error while queued (e.g. Windows EBUSY on a lock file) now retries instead of
+  running unlocked. Only an unusable lock folder runs unlocked.
 
 ## Verification (exact — 2026-11-28, town redesign + debug, commit e295bd2, deployed)
 - tsc clean; 203 unit tests pass (incl. `townLayout.test.ts`, `progression.test.ts`); build OK.
@@ -99,8 +131,9 @@ Working clone: ~/Projects/magic-stationery.
 - Counting camera: the crate and counter are in view but the customer's body hides their basket, so items are
   not seen landing. Fix idea: the customer holds the basket out toward the crate during counting (pose work).
 - Objective pill text overflows into the HUD buttons when long with Japanese (seen: "The shop is open!…").
-- Run e2e only on an idle machine (SwiftShader starvation). Full suite ~20 min.
-- The pen's speech bubble covers the canvas's top-left corner.
+- Concurrent browser suites previously caused CPU starvation and timeouts. All browser runs now go
+  through the machine-wide lock; never bypass it or stop another holder. See `AGENTS.md` for test routing.
+- The pen's speech bubble covers the canvas's top-left corner (hides line starts there; drawing still works).
 - Thin lines read small from the overview camera; drawn desks look spindly.
 - Real Chromebook touchpad, microphone and Chrome recognition untested (fake recogniser only).
 - Zoo: penguins can briefly overlap while walking past each other (resting places are reserved).
