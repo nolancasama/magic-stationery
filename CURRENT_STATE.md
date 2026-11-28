@@ -48,7 +48,7 @@ Working clone: ~/Projects/magic-stationery.
   `RoomArea.follow` + follow camera in `game.ts`; `expandSlotSave` in `save.ts` (old zoo saves fill the new
   anchors with the child's own art); `NavMap` ovals + heap A*. Anchors: 2 elephants, 4 monkeys, 4 bananas,
   2 pandas, 6 bamboo, 5 penguins.
-- Town redesign (2026-11-28, uncommitted): `world/areas/townLayout.ts` is the single source of the town
+- Town redesign (2026-11-28, e295bd2, live): `world/areas/townLayout.ts` is the single source of the town
   (34 x 23 m neighbourhood, no fountain: shop row on the main street, lane, park, zoo forecourt, schoolyard
   with school + gym, zoo behind its fence) + `townLayout.test.ts`; `town.ts` builds it (district colour
   levels, flowers, lamps, balloons, sports-day flags/banner via `setLife`); town follow camera, 🗺️ map with
@@ -59,7 +59,7 @@ Working clone: ~/Projects/magic-stationery.
 - Tests: 207 unit (24 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
   `school.spec.ts`, `zoo.spec.ts`, `market.spec.ts`, `gym.spec.ts` (visits the market first: Taro regression).
 
-## Verification (exact — 2026-11-28, town redesign, uncommitted)
+## Verification (exact — 2026-11-28, town redesign + debug, commit e295bd2, deployed)
 - tsc clean; 203 unit tests pass (incl. `townLayout.test.ts`, `progression.test.ts`); build OK.
 - Full e2e 19/20 on the first build; the failure was fixes.spec WASD in the store (left-arrow glide 0.3 m
   short) and it passed 3/3 alone on the final build (load flake, not town code). Full suite not re-run on the
@@ -113,7 +113,7 @@ Working clone: ~/Projects/magic-stationery.
   rest reservation, panda-garden planting and the plaza camera. Nothing in flight.
 
 ## Next Steps
-0. Town redesign (2026-11-28): review in a browser, then commit and deploy (not committed yet).
+0. (Done 2026-11-28: town redesign + `?debug=1` committed e295bd2 and deployed; live site checked: town, map, debug panel, no page errors.)
 1. (Done 2026-11-28: zoo rebuild committed 3756b6b and deployed. `.ai/` is local delegation scratch — never commit.)
 2. On a real Chromebook: speak the short phrases ("Here you are.", "Do you have a pencil?", "Eight thirty.",
    "I like apples.") fluently and slowly; judge latency and the status line; turn mic off and finish a level.
