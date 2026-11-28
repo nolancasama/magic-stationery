@@ -12,6 +12,8 @@ export class Hud {
   readonly pen: HTMLDivElement;
   readonly buttons: HTMLDivElement;
   readonly townBtn: HTMLButtonElement;
+  /** In town: the map of the whole town (pick a place to go straight there). */
+  readonly mapBtn: HTMLButtonElement;
   readonly settingsBtn: HTMLButtonElement;
   readonly soundBtn: HTMLButtonElement;
   readonly toast: HTMLDivElement;
@@ -27,9 +29,11 @@ export class Hud {
     this.pen = h("div", { class: "pen-badge", html: `${PEN_ICON}<span>Magic Pen</span>` });
     this.pen.style.display = "none";
     this.townBtn = h("button", { class: "icon-btn", title: "Town", "aria-label": "Town", "data-test": "town" }, "🏠");
+    this.mapBtn = h("button", { class: "icon-btn map-btn", title: "Map", "aria-label": "Town map", "aria-pressed": "false", "data-test": "map" }, "🗺️");
+    this.mapBtn.style.display = "none";
     this.soundBtn = h("button", { class: "icon-btn", title: "Sound", "aria-label": "Sound" }, "🔊");
     this.settingsBtn = h("button", { class: "icon-btn", title: "Teacher settings", "aria-label": "Settings", "data-test": "settings" }, "⚙️");
-    this.buttons = h("div", { class: "hud-buttons" }, this.townBtn, this.soundBtn, this.settingsBtn);
+    this.buttons = h("div", { class: "hud-buttons" }, this.mapBtn, this.townBtn, this.soundBtn, this.settingsBtn);
     this.toast = h("div", { class: "toast hidden" });
     this.doorBubble = h("div", { class: "door-bubble", "data-test": "door-exit", hidden: true, role: "group", "aria-labelledby": "door-exit-question" },
       h("div", { id: "door-exit-question", "aria-live": "polite" }, "Do you want to leave?"),
@@ -43,6 +47,15 @@ export class Hud {
   }
 
   onDoorExit: ((yes: boolean) => void) | null = null;
+
+  showMap(on: boolean) {
+    this.mapBtn.style.display = on ? "" : "none";
+  }
+
+  setMapOn(on: boolean) {
+    this.mapBtn.setAttribute("aria-pressed", String(on));
+    this.mapBtn.classList.toggle("on", on);
+  }
 
   setDoorBubble(p: { x: number; y: number } | null) {
     this.doorBubble.hidden = !p;

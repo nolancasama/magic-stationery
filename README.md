@@ -41,6 +41,11 @@ Walk by clicking the floor, or with WASD / the arrow keys.
 Teacher settings (⚙️): microphone on/off, drawing help (Extra = trace stencil from the start), touchpad
 pen (click to put the pen down / lift it), Japanese help, voice speed, music, sound effects, reset.
 
+Debug version: add `?debug=1` to the URL (also on the live site). A panel (` toggles it) unlocks every place
+and the festival, jumps to any stage (new game, has the pen, shop done, middle done, festival ready,
+finished), finishes or resets any one place, goes straight into a place, sets the game speed and shows fps /
+draw calls / position. Stage changes overwrite the browser's save and reload straight into the town.
+
 Debug views: `?e2e=1&scene=store` (or `school`, `zoo`, `market`, `gym`) shows a place erased; add `&fill=1` for it fully
 restored. `?models=1` shows premade 3D models instead of the child's drawings.
 

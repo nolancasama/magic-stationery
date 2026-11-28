@@ -34,7 +34,8 @@ import { ClassroomArea } from "../world/areas/classroom.ts";
 import { ZooArea } from "../world/areas/zoo.ts";
 import { MarketArea } from "../world/areas/market.ts";
 import { GymArea } from "../world/areas/gym.ts";
-import { TOWN_VIEW, TownArea, type PlaceId } from "../world/areas/town.ts";
+import { TownArea, type PlaceId } from "../world/areas/town.ts";
+import { FOLLOW as TOWN_FOLLOW, MAP_VIEW as TOWN_MAP, SPAWN as TOWN_SPAWN, STROLL as TOWN_STROLL } from "../world/areas/townLayout.ts";
 import { GLYPH_POLICY, glyphExample, glyphName, glyphNameJa, glyphScore, judgeGlyph, splitGlyphs, type GlyphVerdict } from "../recognition/glyphs.ts";
 import { Character } from "../world/characters.ts";
 import { Effects } from "../world/effects.ts";
@@ -45,6 +46,8 @@ import { CAST, type CastId } from "./cast.ts";
 import { DOOR_CLICK_DISTANCE, updateDoorExit, type DoorExitState } from "./doorExit.ts";
 import { isBuilt, isOpen } from "./levels/index.ts";
 import {
+  festivalOpen,
+  middleOpen,
   GLYPH_CHARS,
   GYM_SLOT_KEYS,
   GYM_STEPS,
@@ -411,9 +414,12 @@ export class Game {
       this.updateDoorBubble();
     } else if (this.area === "town") {
       this.town.update(t);
-      this.player.update(dt);
+      for (const c of [this.player, ...Object.values(this.cast)]) if (c.root.parent === this.town.scene) c.update(dt);
+      if (!this.townMap) this.updateTownFollow(false);
       for (const [id, el] of this.labels) {
         const p = this.engine.toScreen(this.town.places[id].label);
+        // Hidden under the top HUD row and when off screen.
+        el.style.visibility = p && p.y > 96 && p.x > 40 && p.x < window.innerWidth - 40 ? "" : "hidden";
         if (p) {
           el.style.left = p.x + "px";
           el.style.top = p.y + "px";
@@ -497,6 +503,7 @@ export class Game {
     if (this.keys.has("r")) (x += r.x), (z += r.z);
     if (this.keys.has("l")) (x -= r.x), (z -= r.z);
     const len = Math.hypot(x, z);
+    if (len && this.townMap) this.setTownMap(false);
     if (len && d.lengthSq() === 0) this.startFollow();
     d.set(len ? x / len : 0, len ? z / len : 0);
   }
@@ -519,9 +526,9 @@ export class Game {
     window.addEventListener("blur", () => this.keys.clear());
     // People are obstacles for a player steered by keys (routes keep their own planning).
     this.player.driveCollide = (x, z, r) => {
-      if (this.area === "town") return false;
+      const scene = this.area === "town" ? this.town.scene : this.room.scene;
       for (const c of Object.values(this.cast)) {
-        if (c.root.parent !== this.room.scene) continue;
+        if (c.root.parent !== scene) continue;
         if (Math.hypot(c.position.x - x, c.position.z - z) < r + c.radius * 0.9) return true;
       }
       return false;
@@ -652,13 +659,111 @@ export class Game {
         this.hud.say(why.en + "!", why.ja, 2200);
         return;
       }
+      // From the map, go straight there (quick travel); otherwise walk to the door.
+      this.quickTravel = this.townMap;
+      this.setTownMap(false);
       const w = this.placeWait;
       this.placeWait = null;
       w.resolve(id);
       return;
     }
+    if (this.townMap) {
+      this.setTownMap(false);
+      return;
+    }
     const floor = this.engine.pick(x, y, [this.town.ground]);
-    if (floor) void this.player.go(floor.point.x, floor.point.z);
+    if (floor && this.placeWait) void this.player.go(floor.point.x, floor.point.z);
+  }
+
+  // ------------------------------------------------------------ town camera and map
+  /** The map view of the town is up (every place in view; clicking one goes straight there). */
+  townMap = false;
+  private quickTravel = false;
+  /** Townsfolk strolling now (stopped on leaving the town). */
+  private strollers = new Set<NpcId>();
+  private strollToken = 0;
+
+  /** Go straight into a place (map quick travel; also the debug panel). False if the town is not waiting. */
+  travelTo(id: PlaceId): boolean {
+    this.quickTravel = true;
+    if (this.clickPlace(id)) return true;
+    this.quickTravel = false;
+    return false;
+  }
+
+  /** True once after a place was picked on the map: skip the walk to its door. */
+  takeQuickTravel(): boolean {
+    const q = this.quickTravel;
+    this.quickTravel = false;
+    return q;
+  }
+
+  setTownMap(on: boolean) {
+    if (this.area !== "town") on = false;
+    this.townMap = on;
+    this.town.setMapMode(on);
+    this.hud.setMapOn(on);
+    if (on) {
+      this.player.stop();
+      this.engine.focus(TOWN_MAP.pos, TOWN_MAP.look);
+    } else if (this.area === "town") this.updateTownFollow(false);
+  }
+
+  private updateTownFollow(snap: boolean) {
+    const f = TOWN_FOLLOW;
+    const { x, z } = this.player.position;
+    const lookX = THREE.MathUtils.clamp(x, f.look.minX, f.look.maxX);
+    const lookZ = THREE.MathUtils.clamp(z - f.lookAhead, f.look.minZ, f.look.maxZ);
+    this.engine.focus({ x: lookX, y: f.up, z: lookZ + f.back }, { x: lookX, y: f.lookUp, z: lookZ }, snap);
+  }
+
+  /** People out and about in restored districts (the town comes back to life). */
+  private startStrollers() {
+    this.stopStrollers();
+    const token = ++this.strollToken;
+    const p = (id: RoomPlace) => placeProgress(this.save, id);
+    const who: [NpcId, keyof typeof TOWN_STROLL][] = [];
+    if (p("store") >= 1) who.push(["taro", "shops"]);
+    if (p("school") >= 1) who.push(["ken", "campus"], ["yui", "campus"]);
+    if (p("zoo") >= 1) who.push(["oka", "zoo"]);
+    if (p("market") >= 1) who.push(["green", "market"]);
+    if (p("gym") >= 0.5) who.push(["kato", "gym"]);
+    for (const [i, [id, where]] of who.entries()) {
+      const c = this.cast[id];
+      const spots = TOWN_STROLL[where];
+      const n = (i * 2) % spots.length;
+      this.town.scene.add(c.root);
+      c.collide = (x, z, r) => this.town.nav.collides(x, z, r);
+      c.router = (ax, az, bx, bz) => this.town.nav.route(ax, az, bx, bz);
+      c.place(spots[n].x, spots[n].z, Math.random() * Math.PI * 2);
+      this.strollers.add(id);
+      void this.stroll(id, spots, n, token);
+    }
+  }
+
+  private async stroll(id: NpcId, spots: { x: number; z: number }[], n: number, token: number) {
+    const c = this.cast[id];
+    const alive = () => token === this.strollToken && this.area === "town";
+    await wait(0.5 + Math.random() * 2);
+    while (alive()) {
+      n = (n + 1 + Math.floor(Math.random() * (spots.length - 1))) % spots.length;
+      const s = spots[n];
+      const ok = await c.go(s.x + (Math.random() - 0.5) * 0.8, s.z + (Math.random() - 0.5) * 0.6);
+      if (!ok || !alive()) return;
+      c.faceTo(this.player.position.x, this.player.position.z);
+      if (Math.random() < 0.4) c.emote(Math.random() < 0.5 ? "wave" : "laugh", 1.2);
+      await wait(2.5 + Math.random() * 3.5);
+    }
+  }
+
+  private stopStrollers() {
+    this.strollToken++;
+    for (const id of this.strollers) {
+      const c = this.cast[id];
+      c.stop();
+      c.root.removeFromParent();
+    }
+    this.strollers.clear();
   }
 
   // ------------------------------------------------------------ places
@@ -682,6 +787,10 @@ export class Game {
 
   /** Walk into a level room: the player at the door, the host at work, saved things in place. */
   enterRoom(place: RoomPlace) {
+    this.setTownMap(false);
+    this.stopStrollers();
+    this.player.speed = 1.7;
+    this.hud.showMap(false);
     this.area = place;
     this.place = place;
     this.room = this.areaOf(place);
@@ -731,18 +840,27 @@ export class Game {
     this.ensurePen();
     this.player.collide = (x, z, r) => this.town.nav.collides(x, z, r);
     this.player.router = (ax, az, bx, bz) => this.town.nav.route(ax, az, bx, bz);
+    // Streets are longer than rooms: walk a little faster in town.
+    this.player.speed = 2.6;
     if (from) {
       const door = this.town.places[from].door;
-      this.player.place(door.x + 0.5, door.z + 0.6, 1.2);
-    } else this.player.place(0, 5.2, Math.PI);
+      this.player.place(door.x, door.z + 0.5, 0);
+    } else this.player.place(TOWN_SPAWN.x, TOWN_SPAWN.z, TOWN_SPAWN.heading);
     let restored = 0;
+    const progress = {} as Record<PlaceId, number>;
     for (const place of ROOM_PLACES) {
       const p = placeProgress(this.save, place);
       this.town.setPlaceLevel(place, 0.08 + 0.92 * p);
+      progress[place] = p;
       restored += p;
     }
-    this.town.setPlazaLevel(0.1 + 0.18 * restored);
-    this.engine.focus(TOWN_VIEW.pos, TOWN_VIEW.look, true);
+    this.town.setLife({ progress, festivalOpen: festivalOpen(this.save), festivalDone: this.save.gym.steps.includes("festival") });
+    this.townMap = false;
+    this.town.setMapMode(false);
+    this.hud.setMapOn(false);
+    this.hud.showMap(true);
+    this.updateTownFollow(true);
+    this.startStrollers();
     this.engine.setLensShift(0);
     this.hud.setPlace("Magic Town", "まほうの まち", 0, 0);
     const next = this.nextPlace();
@@ -755,6 +873,7 @@ export class Game {
       if (room && isOpen(id, this.save)) {
         const u = this.unitsOf(room);
         el.innerHTML = `${p.name}<span class="ja">${p.ja}</span><span class="prog">★ ${u.done} / ${u.total}</span>`;
+        if (u.done < u.total) el.classList.add("todo");
       } else {
         el.classList.add("locked");
         const why = !isBuilt(id) ? "Coming soon" : lockedWhy(id).en;
@@ -762,7 +881,7 @@ export class Game {
       }
       this.labels.set(id, el);
     }
-    this.marker = next ? this.town.places[next.place].label.clone().add(new THREE.Vector3(0, 0.9, 0)) : null;
+    this.marker = next?.place ? this.town.places[next.place].label.clone().add(new THREE.Vector3(0, 0.9, 0)) : null;
     music.setLevel(Math.min(1, 0.1 + 0.2 * restored));
     music.start();
   }
@@ -781,14 +900,15 @@ export class Game {
     this.holdItem(this.player, "magicPen", buildMagicPen(), 0.75);
   }
 
-  /** The next place to restore, if any (the town's objective). */
-  nextPlace(): { place: RoomPlace; en: string; ja: string } | null {
-    if (placeProgress(this.save, "store") < 1) return { place: "store", en: "Go to the Stationery Store!", ja: "ぶんぼうぐやに いこう！" };
-    if (placeProgress(this.save, "school") < 1) return { place: "school", en: "Go to the School!", ja: "がっこうに いこう！" };
-    if (placeProgress(this.save, "zoo") < 1) return { place: "zoo", en: "Go to the Zoo!", ja: "どうぶつえんに いこう！" };
-    if (placeProgress(this.save, "market") < 1) return { place: "market", en: "Go to the Supermarket!", ja: "スーパーに いこう！" };
-    if (placeProgress(this.save, "gym") < 1) return { place: "gym", en: "Go to the Gym!", ja: "たいいくかんに いこう！" };
-    return null;
+  /**
+   * The town's objective. The shop first (mandatory), then any place in any
+   * order (no single target), then the sports festival at the gym (the ending).
+   */
+  nextPlace(): { place: RoomPlace | null; en: string; ja: string } | null {
+    if (!middleOpen(this.save)) return { place: "store", en: "Go to the Stationery Store!", ja: "ぶんぼうぐやに いこう！" };
+    if (this.save.gym.steps.includes("festival")) return null;
+    if (festivalOpen(this.save)) return { place: "gym", en: "Go to the Gym for the sports festival!", ja: "たいいくかんで うんどうかい！" };
+    return { place: null, en: "Choose a place to help!", ja: "どこを たすける？ えらぼう！" };
   }
 
   waitPlace(): Promise<PlaceId> {
@@ -1677,15 +1797,9 @@ export function capital(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Why a built place is still closed (places open in order: each needs the one before). */
+/** Why a built place is still closed (only the shop comes first; then every place is open). */
 export function lockedWhy(id: PlaceId): { en: string; ja: string } {
-  const before: Partial<Record<PlaceId, { en: string; ja: string }>> = {
-    school: { en: "Help the shop first", ja: "まず ぶんぼうぐやを たすけよう！" },
-    zoo: { en: "Help the school first", ja: "まず がっこうを たすけよう！" },
-    market: { en: "Help the zoo first", ja: "まず どうぶつえんを たすけよう！" },
-    gym: { en: "Help the supermarket first", ja: "まず スーパーを たすけよう！" }
-  };
-  return before[id] ?? { en: "Not yet", ja: "まだ だよ" };
+  return id === "store" ? { en: "Not yet", ja: "まだ だよ" } : { en: "Help the shop first", ja: "まず ぶんぼうぐやを たすけよう！" };
 }
 
 export type { CastId };

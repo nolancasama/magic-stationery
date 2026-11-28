@@ -276,6 +276,19 @@ export function gymUnits(data: SaveData): { done: number; total: number } {
   return { done, total: GYM_SLOT_KEYS.length + 1 };
 }
 
+/** Debug mode only (`?debug=1`): every place and the sports festival open whatever the progress. */
+export const debugUnlock = { all: false };
+
+/** The shop's tutorial is over (the magic pen, and Taro has his schoolbag): every other place opens. */
+export function middleOpen(data: SaveData): boolean {
+  return debugUnlock.all || storeProgress(data) >= 1 && data.store.steps.includes("taro");
+}
+
+/** The classroom, the zoo and the supermarket are restored too: the sports festival can start at the gym. */
+export function festivalOpen(data: SaveData): boolean {
+  return debugUnlock.all || (["store", "school", "zoo", "market"] as const).every((p) => placeProgress(data, p) >= 1);
+}
+
 export function placeProgress(data: SaveData, place: "store" | "school" | "zoo" | "market" | "gym"): number {
   if (place === "store") return storeProgress(data);
   if (place === "school") return schoolProgress(data);

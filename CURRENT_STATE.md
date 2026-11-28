@@ -27,7 +27,7 @@ Working clone: ~/Projects/magic-stationery.
   `town.ts`.
 - `src/game/` — `game.ts` (one controller for every room; `inLevelRoom` drives per-frame updates and gaze;
   `ROOM_PLACES`, `unitsOf`, `lockedWhy`; `pickSlot`/`cancelPick` for counting), `levels/store.ts`, `school.ts`,
-  `zoo.ts`, `market.ts`, `gym.ts`, `levels/index.ts` (unlock order shop → classroom → zoo → supermarket → gym),
+  `zoo.ts`, `market.ts`, `gym.ts`, `levels/index.ts` (shop first, then any order; the gym's festival waits for `festivalOpen`),
   `save.ts` (`ms.save.v1`: `store`, `school`, `zoo`, `market`, `gym`), `cast.ts` (+ Mr. Green, Coach Kato).
 - Level 4 pieces: `objects/market.ts` (apple, orange, tomato, carrot, egg, milk, basket), vocab words + `round`
   / `oval` shape rules, hand-made hints in `examples.ts`, phrases (what do you want / how many / here you are /
@@ -48,8 +48,27 @@ Working clone: ~/Projects/magic-stationery.
   `RoomArea.follow` + follow camera in `game.ts`; `expandSlotSave` in `save.ts` (old zoo saves fill the new
   anchors with the child's own art); `NavMap` ovals + heap A*. Anchors: 2 elephants, 4 monkeys, 4 bananas,
   2 pandas, 6 bamboo, 5 penguins.
-- Tests: 192 unit (21 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
+- Town redesign (2026-11-28, uncommitted): `world/areas/townLayout.ts` is the single source of the town
+  (34 x 23 m neighbourhood, no fountain: shop row on the main street, lane, park, zoo forecourt, schoolyard
+  with school + gym, zoo behind its fence) + `townLayout.test.ts`; `town.ts` builds it (district colour
+  levels, flowers, lamps, balloons, sports-day flags/banner via `setLife`); town follow camera, 🗺️ map with
+  quick travel, townsfolk strollers, town walk speed 2.6 in `game.ts`; `save.ts` `middleOpen` /
+  `festivalOpen`; gym `festivalLater`; `scripts/town-shots.mjs` (stages start/middle/festival/done).
+- Debug version: `?debug=1` panel (`ui/debugPanel.ts`, `game/debug.ts`, `debugUnlock` in `save.ts`): unlock
+  everything, stage presets, finish/reset/go per place, speed, live stats. Checked in a browser.
+- Tests: 207 unit (24 files); e2e `fixes.spec.ts` (speech, WASD, pens, gaze, 2 door-exit), `store.spec.ts` (2),
   `school.spec.ts`, `zoo.spec.ts`, `market.spec.ts`, `gym.spec.ts` (visits the market first: Taro regression).
+
+## Verification (exact — 2026-11-28, town redesign, uncommitted)
+- tsc clean; 203 unit tests pass (incl. `townLayout.test.ts`, `progression.test.ts`); build OK.
+- Full e2e 19/20 on the first build; the failure was fixes.spec WASD in the store (left-arrow glide 0.3 m
+  short) and it passed 3/3 alone on the final build (load flake, not town code). Full suite not re-run on the
+  final build (changes since: map framing, people block keys in town).
+- Town screenshots judged (`scripts/town-shots.mjs`: start / middle / festival / done, follow camera at
+  street, shops, market, zoo, yard, gym, and the map). Old-format saves (no town data) load; labels/stars,
+  strollers, flowers, balloons, flags follow progress. In town: W moves 2.0 m north, → moves east; all five
+  labels visible on the map; map click on the zoo enters it in ~1.4 s; no page errors.
+- Draw calls (map view): start 24, middle 48, festival/done 74.
 
 ## Verification (exact — 2026-11-28, zoo rebuild, commit 3756b6b)
 - tsc clean; 192 unit tests pass; build OK; full e2e 20/20 pass (12.9 min) on the final build.
@@ -75,6 +94,8 @@ Working clone: ~/Projects/magic-stationery.
   3.78 → 3.53 s; wrong final 1.83 → 1.33 s. Real Chrome engine latency unmeasured.
 
 ## Known Issues
+- Town: real Chromebook performance unmeasured; townsfolk only stroll (no talking); the bus stop sign pole
+  leans into the bottom of the follow view at the crosswalk.
 - Counting camera: the crate and counter are in view but the customer's body hides their basket, so items are
   not seen landing. Fix idea: the customer holds the basket out toward the crate during counting (pose work).
 - Objective pill text overflows into the HUD buttons when long with Japanese (seen: "The shop is open!…").
@@ -92,6 +113,7 @@ Working clone: ~/Projects/magic-stationery.
   rest reservation, panda-garden planting and the plaza camera. Nothing in flight.
 
 ## Next Steps
+0. Town redesign (2026-11-28): review in a browser, then commit and deploy (not committed yet).
 1. (Done 2026-11-28: zoo rebuild committed 3756b6b and deployed. `.ai/` is local delegation scratch — never commit.)
 2. On a real Chromebook: speak the short phrases ("Here you are.", "Do you have a pencil?", "Eight thirty.",
    "I like apples.") fluently and slowly; judge latency and the status line; turn mic off and finish a level.

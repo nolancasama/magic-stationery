@@ -430,3 +430,39 @@ pens. Accepted with these changes and additions:
   shortcuts keep the full clearance radius. The colour wave reaches the far corners of big rooms. One
   foliage material sways, water shimmers in the shader; no new lights or shadows.
 - **Not done:** a viewing window into the pool, birds, a path-cost map, giraffes/fish/ducks (still deferred).
+
+## 2026-11-28 — The town redesigned as a neighbourhood; free middle (plan reviewed and built directly by Claude)
+- **No fountain, no hub.** The town is a 34 x 23 m walkable neighbourhood (was 21 x 16 round a fountain plaza):
+  a shop row on the main street (houses, Stationery Store, a café-house, Supermarket, houses), a lane north
+  past a little park to the zoo forecourt and the school gate, the school and gym behind a schoolyard with a
+  running track, the zoo behind its fence at the north-west edge (giraffe over the fence), a small shrine
+  where the lane ends. `townLayout.ts` holds every position (as `zooLayout.ts` does for the zoo);
+  `townLayout.test.ts` checks reachability, 2 m paths, building gaps, door aprons and an open 10 x 4 m
+  festival area. *Rejected:* spreading the old five buildings round an empty centre; a bigger monument.
+- **Every building faces south (the camera).** Signs read from every view; no more buildings turned to a
+  centre. *Rejected:* keeping rotated buildings (signs seen edge-on from a follow camera).
+- **Follow camera + map.** The town camera follows the player (clamped so the world's edge stays out of
+  view); the 🗺️ button shows the whole town, and clicking a place on the map goes straight in (quick travel).
+  Walking pace in town is 2.6 m/s (rooms 1.7); the farthest walk is under 34 m. *Rejected:* a separate
+  teacher shortcut menu (the map does it); one fixed overview camera (everything far away).
+- **Progression: mandatory start, free middle, mandatory ending.** The shop first (pen + Taro); then the
+  classroom, zoo, supermarket and gym are all open in any order. The gym's equipment steps play any time;
+  the sports festival (the game's ending) waits for the classroom, zoo and supermarket (`festivalOpen`);
+  before that Coach Kato asks the child to come back. The town objective is "Choose a place to help!"
+  (open, unfinished places get a yellow ring on their labels), then "Go to the Gym for the sports
+  festival!". *Rejected:* keeping the fixed chain. Saves: only unlock rules changed; old saves open at
+  least what they had; nothing positional is saved for the town.
+- **The town comes back to life.** Districts have their own colour levels (shops = store + market, campus =
+  school + gym, zoo, streets = whole town); flower beds bloom, townsfolk appear in restored districts (Taro on
+  the shop row, Ken and Yui in the schoolyard, Mr. Oka at the zoo gate, Mr. Green at his fruit stand, Coach
+  Kato in the yard), balloons go up at the zoo gate, sports-day flags and an "SPORTS DAY うんどうかい"
+  banner go up when the festival is ready. The game's "matsuri" is the existing sports festival (undōkai).
+- **Japanese-street details, kept light:** utility poles with wires and lamps (short, few: they stood in
+  front of the shop signs), a crosswalk, vending machines, bicycles, a bus stop, gable-roofed houses, sakura.
+
+## 2026-11-28 — Debug version (`?debug=1`)
+- The user wanted to unlock anything for testing. A panel (`ui/debugPanel.ts`, presets in `game/debug.ts`)
+  unlocks everything (`debugUnlock.all`, kept in `ms.debug.unlock`, read only with `?debug=1`), jumps to a
+  stage, finishes/resets a place, quick-travels, sets speed, shows live stats. Stage changes write the normal
+  save and reload with `&go=1` (title skipped). *Rejected:* a separate debug build (one URL flag works on the
+  deployed site too); editing state live without reload (every room rebuilds from the save on entry anyway).

@@ -8,12 +8,13 @@ import { music } from "./audio/music.ts";
 import { Game } from "./game/game.ts";
 import { LEVELS } from "./game/levels/index.ts";
 import { startZooLife } from "./game/levels/zooLife.ts";
-import { defaults, placeProgress } from "./game/save.ts";
+import { defaults, festivalOpen, placeProgress } from "./game/save.ts";
 import { exampleFor } from "./recognition/examples.ts";
 import { glyphExample } from "./recognition/glyphs.ts";
 import { Recognizer } from "./recognition/recognizer.ts";
 import type { WordId } from "./recognition/vocab.ts";
 import { tts } from "./speech/tts.ts";
+import { installDebugPanel, loadDebugUnlock } from "./ui/debugPanel.ts";
 import { titleScreen } from "./ui/screens.ts";
 import type { PlaceId } from "./world/areas/town.ts";
 import { setAnimSpeed, wait } from "./world/tween.ts";
@@ -21,10 +22,14 @@ import type { Drawing } from "./draw/drawing.ts";
 
 const params = new URLSearchParams(window.location.search);
 const E2E = params.has("e2e");
+/** Debug version: `?debug=1` (panel to unlock anything, jump to any stage; ui/debugPanel.ts). */
+const DEBUG = params.has("debug");
 
 async function boot() {
   const app = document.getElementById("app") as HTMLElement;
+  if (DEBUG) loadDebugUnlock();
   const game = new Game(app);
+  if (DEBUG) installDebugPanel(game);
   if (E2E) {
     tts.setMuted(true);
     setAnimSpeed(Number(params.get("speed") ?? 3));
@@ -71,7 +76,8 @@ async function boot() {
     return;
   }
 
-  const choice = await titleScreen(game.ui, game.save.started && game.save.store.steps.length > 0);
+  // The debug panel reloads straight into the town (`&go=1`).
+  const choice = DEBUG && params.has("go") ? "continue" : await titleScreen(game.ui, game.save.started && game.save.store.steps.length > 0);
   audio.unlock();
   if (choice === "start") {
     const settings = game.save.settings;
@@ -105,15 +111,19 @@ async function boot() {
     leaving?.();
   });
 
+  game.hud.mapBtn.addEventListener("click", () => {
+    if (game.area === "town" && !game.scripting) game.setTownMap(!game.townMap);
+  });
+
   for (;;) {
     const next = game.nextPlace();
-    if (next) game.objective(next.en, next.ja, game.town.places[next.place].label.clone().setY(5.4));
+    if (next) game.objective(next.en, next.ja, next.place ? game.town.places[next.place].label.clone().add({ x: 0, y: 0.9, z: 0 }) : null);
     else game.objective(null);
     const picked = await game.waitPlace();
     if (picked !== "store" && picked !== "school" && picked !== "zoo" && picked !== "market" && picked !== "gym") continue;
     game.setMarker(null);
     const door = game.town.places[picked].door;
-    await game.player.go(door.x, door.z);
+    if (!game.takeQuickTravel()) await game.player.go(door.x, door.z);
     await game.fadeTo(() => game.enterRoom(picked));
     game.objective(null);
     await LEVELS[picked].run?.(game);
@@ -123,18 +133,16 @@ async function boot() {
     if (placeProgress(game.save, picked) >= 1 && !announced.has(picked)) {
       announced.add(picked);
       game.scripting = true;
+      const name: Record<string, [string, string]> = { school: ["School", "がっこう"], zoo: ["Zoo", "どうぶつえん"], market: ["Supermarket", "スーパー"] };
       if (picked === "store") {
         await game.say("narrator", "Look! The **Stationery Store** is back in colour!", "みて！ ぶんぼうぐやに いろが もどった！");
-        await game.say("narrator", "Next: the **School**! Let's go!", "つぎは がっこう！ いってみよう！");
-      } else if (picked === "school") {
-        await game.say("narrator", "Look! The **School** is back in colour!", "みて！ がっこうに いろが もどった！");
-        await game.say("narrator", "Next: the **Zoo**! Let's go!", "つぎは どうぶつえん！ いってみよう！");
-      } else if (picked === "zoo") {
-        await game.say("narrator", "Look! The **Zoo** is back in colour!", "みて！ どうぶつえんに いろが もどった！");
-        await game.say("narrator", "Next: the **Supermarket**! Let's go!", "つぎは スーパー！ いってみよう！");
-      } else if (picked === "market") {
-        await game.say("narrator", "Look! The **Supermarket** is back in colour!", "みて！ スーパーに いろが もどった！");
-        await game.say("narrator", "Next: the **Gym**! Let's go!", "つぎは たいいくかん！ いってみよう！");
+        await game.say("narrator", "Now you can go **anywhere** in town! Where do you want to go?", "まちの どこにでも いけるよ！ どこに いく？");
+        await game.say("narrator", "Tip: click the 🗺️ to see the **map**.", "🗺️ で まちの ちずが みられるよ。");
+      } else if (picked !== "gym") {
+        const [en, ja] = name[picked];
+        await game.say("narrator", `Look! The **${en}** is back in colour!`, `みて！ ${ja}に いろが もどった！`);
+        if (festivalOpen(game.save)) await game.say("narrator", "Everyone is ready! Let's go to the **Gym** for the **sports festival**!", "みんな じゅんび できた！ たいいくかんで うんどうかいだ！");
+        else await game.say("narrator", "Where next? **Choose** a place!", "つぎは どこ？ えらぼう！");
       } else {
         await game.say("narrator", "Look! The **whole town** is back in colour!", "みて！ まちじゅうに いろが もどった！");
         await game.say("narrator", "Thank you for using the **magic pen**! You can visit every place again.", "まほうの ペンを つかってくれて ありがとう！ どこでも また あそびに いけるよ。");

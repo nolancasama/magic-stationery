@@ -11,7 +11,9 @@
  * 5. Baseball: draw a bat. The player asks Coach Kato "What sport do you
  *    like?" — "I like baseball!" — she pitches, Ken hits a home run.
  * 6. The sports festival: everyone from the town comes; the player says
- *    "Let's play!" The whole town is restored.
+ *    "Let's play!" The whole town is restored. This is the game's ending: it
+ *    waits until the classroom, zoo and supermarket are restored too
+ *    (`festivalOpen`); before that Coach Kato asks the player to come back.
  * The child's drawings are the equipment people play with.
  */
 import * as THREE from "three";
@@ -26,7 +28,7 @@ import { completionCard, type AlbumItem } from "../../ui/screens.ts";
 import { GOAL, KATO_SPOT, RINGS, VIEWS, type GymSlotId } from "../../world/areas/gym.ts";
 import type { Character } from "../../world/characters.ts";
 import { animate, wait } from "../../world/tween.ts";
-import { GYM_SLOT_KEYS, placeProgress } from "../save.ts";
+import { festivalOpen, GYM_SLOT_KEYS, placeProgress } from "../save.ts";
 import type { Game, NpcId } from "../game.ts";
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -44,7 +46,9 @@ export async function runGym(g: Game) {
   if (!g.stepDone("basketball")) await stepBasketball(g);
   if (!g.stepDone("tennis")) await stepTennis(g);
   if (!g.stepDone("baseball")) await stepBaseball(g);
-  if (!g.stepDone("festival")) {
+  const waiting = !g.stepDone("festival") && !festivalOpen(g.save);
+  if (waiting) await festivalLater(g);
+  else if (!g.stepDone("festival")) {
     await stepFestival(g);
     await finale(g);
   }
@@ -52,7 +56,18 @@ export async function runGym(g: Game) {
   g.focus(VIEWS.overview);
   g.engine.setLensShift(0);
   g.dialogue.hide();
-  g.objective("The gym is ready! Click the 🏠 to go to town.", "たいいくかんが もどった！ 🏠 で まちに もどれるよ。");
+  if (waiting) g.objective("Help the other places! Then come back. 🏠", "ほかの ばしょも たすけてね！ 🏠");
+  else g.objective("The gym is ready! Click the 🏠 to go to town.", "たいいくかんが もどった！ 🏠 で まちに もどれるよ。");
+}
+
+/** The gym is ready but the town is not: the festival is the game's ending, so it waits. */
+async function festivalLater(g: Game) {
+  const kato = g.cast.kato;
+  g.player.faceTo(kato.position.x, kato.position.z);
+  g.focus(g.talkView(g.player, kato), true);
+  kato.emote("wave", 1.2);
+  await g.say("kato", "Thank you! The gym is **ready**!", "ありがとう！ たいいくかんの じゅんびが できた！");
+  await g.say("kato", "When the **whole town** is back, let's have the **sports festival** here!", "まちが ぜんぶ もどったら、ここで うんどうかいを しよう！");
 }
 
 function player(g: Game, id: NpcId, x: number, z: number) {

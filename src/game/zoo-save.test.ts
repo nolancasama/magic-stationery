@@ -29,13 +29,11 @@ describe("zoo save", () => {
     expect(placeProgress(s, "zoo")).toBeCloseTo(2 / 7);
   });
 
-  it("opens once the classroom is finished", () => {
+  it("opens with the other places once the shop is finished (free middle)", () => {
     const s = defaults();
     expect(isOpen("zoo", s)).toBe(false);
-    s.school.slots = { desks: { tints: [null] }, chairs: { tints: [null] } };
-    const art = { w: 1, h: 1, lw: 9, strokes: [{ c: "#000000", p: [0, 0, 1, 1] }] };
-    s.school.glyphs = { n12: art, n3: art, n6: art, n9: art, ld: art, lg: art, lm: art, lt: art };
-    s.school.steps.push("bell");
+    for (const k of ["pencilCup", "erasers", "scissors", "rulers", "crayons", "books", "notebooks", "schoolbags"] as const) s.store.slots[k] = { tints: [null] };
+    s.store.steps.push("taro");
     expect(isOpen("zoo", s)).toBe(true);
   });
 });
